@@ -197,6 +197,52 @@ def extract_context(document: dict) -> dict:
     return {"status": "ambiguous" if ambiguous else "complete", "ambiguous_dimensions": ambiguous, "dimensions": dimensions}
 
 
+def uploaded_reference_metadata(document: dict, display_name: str, version: str = "1.0") -> dict:
+    """Build immutable, source-linked metadata for a locally uploaded standard.
+
+    Applicability facts are extracted from the source. Missing facts remain
+    explicit unknowns; an upload never implies organisational approval.
+    """
+    context = extract_context(document)
+    dimensions = context.get("dimensions", {})
+    family_dimension = dimensions.get("family", {})
+    if document.get("coverage", {}).get("status") != "complete":
+        raise ValueError("Reference extraction is incomplete: " + "; ".join(document.get("coverage", {}).get("issues", [])))
+    if family_dimension.get("state") != "known":
+        raise ValueError("Could not determine one supported reference family from the extracted DOCX")
+    family = family_dimension["value"]
+    if family not in {"nda", "customer_order"}:
+        raise ValueError("Only synthetic NDA and customer-order references are supported")
+
+    def fact(name):
+        item = dimensions.get(name, {})
+        return item.get("value") if item.get("state") == "known" else None
+
+    if not isinstance(display_name, str) or not display_name.strip() or len(display_name.strip()) > 120:
+        raise ValueError("Reference display name must be 1 to 120 characters")
+    if not isinstance(version, str) or not version.strip() or len(version.strip()) > 40:
+        raise ValueError("Reference version must be 1 to 40 characters")
+    return {
+        "reference_id": "UP-" + document["sha256"],
+        "display_name": display_name.strip(),
+        "family": family,
+        "variant": fact("variant"),
+        "deployment": fact("deployment"),
+        "channel": fact("channel"),
+        "direction": fact("direction"),
+        "purpose": fact("purpose"),
+        "jurisdiction": fact("jurisdiction"),
+        "applicability": {name: {"state": item.get("state", "unknown"), "value": item.get("value"), "evidence": item.get("evidence", [])} for name, item in dimensions.items()},
+        "original_filename": document["filename"],
+        "sha256": document["sha256"],
+        "version": version.strip(),
+        "status": "registered_for_evaluation",
+        "approval_status": "unapproved",
+        "provenance": "locally_uploaded_synthetic_reference",
+        "extraction": {"status": document["coverage"]["status"], "limitations": list(document["coverage"].get("issues", [])), "passage_count": len(document.get("units", [])), "parts": list(document["coverage"].get("parts", []))},
+    }
+
+
 def propose_reference(document: dict, references: list[dict]) -> dict:
     """Propose an exact-context candidate or abstain; never approve a baseline."""
     context = extract_context(document)

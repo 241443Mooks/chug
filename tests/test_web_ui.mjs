@@ -197,3 +197,24 @@ test('local Python host keeps the interactive API enabled',async()=>{
   assert.equal((await h.run("api('/api/decisions',{method:'POST'})")).id,'new-decision');
   assert.deepEqual(calls,['/api/queue','/api/decisions']);
 });
+
+test('reference page lists family, approval status and a detail action for the local library',()=>{
+  const h=harness(items,'127.0.0.1');
+  h.run("state.reference={current:{filename:'baseline.docx',kind:'bundled',sha256:'abc',coverage:{status:'complete'},source_integrity:'verified',units:[]},available:[]}");
+  h.run("state.referenceLibrary={references:[{reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'registered_for_evaluation',approval_status:'unapproved',version:'1.0',source_integrity:'verified',sha256:'123'}],count:1}");
+  h.run("state.referenceDetail={reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'registered_for_evaluation',approval_status:'unapproved',version:'1.0',provenance:'local upload',original_filename:'order.docx',sha256:'123',source_integrity:'verified',variant:null,deployment:null,channel:null,jurisdiction:null,extraction:{status:'complete',passage_count:4,limitations:[]},original_url:'/api/reference-library/UP-123/original'}");
+  const page=h.run('referenceView()');
+  assert.match(page,/Reference standards/);
+  assert.match(page,/customer order · registered for evaluation/);
+  assert.match(page,/data-reference-detail="UP-123"/);
+  assert.match(page,/Fictional order · unapproved/);
+  assert.match(page,/Download exact original DOCX/);
+});
+
+test('public reference page keeps its standard upload control hidden',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  const uploadControl={hidden:false};
+  h.context.document.querySelectorAll=selector=>selector.startsWith('.upload-button')?[uploadControl]:[];
+  h.run('applyStaticDemo()');
+  assert.equal(uploadControl.hidden,true);
+});

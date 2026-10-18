@@ -149,3 +149,11 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Keep the four questions in order. Keep the main finding, explanation and uncertainty visible; put original/reference wording in a native disclosure and place the existing decision action immediately after the concise summary. Secondary findings, provenance, technical checks and history remain reachable through labelled disclosures or the existing evidence tabs.
 
 **Evidence and uncertainty:** The 1280 × 720 screenshot shows the action without scrolling; keyboard activation opened the existing decision form, and an Escalate decision with rationale persisted in an isolated temporary ledger. The available browser surface did not expose a viewport override, so narrow-screen layout is covered by responsive CSS and regression assertions but remains unverified in a resized browser. Creative acceptance remains with the owner.
+
+## Issue #6 — A reference upload is not a baseline change for every family
+
+**Observation:** The existing upload path selected every accepted document as the baseline for new NDA reviews. That behavior cannot safely represent customer-order standards, which use different applicability and comparison components.
+
+**Decision:** Keep one persistent reference library and one source-integrity model. Extract family and applicability from the uploaded source, preserve unknown facts, and register customer orders without changing the selected NDA. Preserve the existing NDA selection behavior while visibly marking uploaded standards as unapproved.
+
+**Evidence and uncertainty:** A distinct synthetic customer-order DOCX and an NDA both persist with their bytes and metadata across an `App` restart; the customer-order upload leaves the NDA selection and prior review binding unchanged. The existing customer-order comparator is not yet connected to incoming order reviews, and no human usability acceptance has been recorded.
