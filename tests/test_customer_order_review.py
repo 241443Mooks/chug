@@ -2,8 +2,8 @@
 from pathlib import Path
 import unittest
 
-from chugchug.customer_order_review import CustomerOrderReview
-from chugchug.document import extract_file
+from chug.customer_order_review import CustomerOrderReview
+from chug.document import extract_file
 
 
 ROOT = Path(__file__).resolve().parents[1]

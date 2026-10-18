@@ -2,9 +2,9 @@
 from pathlib import Path
 import unittest
 
-from chugchug.customer_order_pack import CustomerOrderPack
-from chugchug.document import extract_file
-from chugchug.reference_registry import load_registry, propose_reference
+from chug.customer_order_pack import CustomerOrderPack
+from chug.document import extract_file
+from chug.reference_registry import load_registry, propose_reference
 
 
 ROOT = Path(__file__).resolve().parents[1]

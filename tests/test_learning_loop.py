@@ -10,8 +10,8 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from chugchug.document import extract_file
-from chugchug.server import App, Handler
+from chug.document import extract_file
+from chug.server import App, Handler
 
 ROOT = Path(__file__).resolve().parents[1]
 LEARNING = ROOT / "dataset/learning"
@@ -41,7 +41,7 @@ class LearningLoopTests(unittest.TestCase):
 
     def upload(self, filename):
         data = (LEARNING / filename).read_bytes()
-        boundary = "chugchug-learning-boundary"
+        boundary = "chug-learning-boundary"
         multipart = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + data + (f'\r\n--{boundary}--\r\n').encode()
         request = urllib.request.Request(self.base + "/api/upload", data=multipart, headers={"Content-Type": "multipart/form-data; boundary=" + boundary}, method="POST")
         with urllib.request.urlopen(request) as response:

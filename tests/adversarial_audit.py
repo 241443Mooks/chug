@@ -5,8 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
-from chugchug.document import extract_file
-from chugchug.engine import analyse, load_library
+from chug.document import extract_file
+from chug.engine import analyse, load_library
 
 ROOT = Path(__file__).resolve().parents[1]
 

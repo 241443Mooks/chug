@@ -2,7 +2,7 @@
 import csv
 from pathlib import Path
 
-from chugchug.engine import analyse, load_library
+from chug.engine import analyse, load_library
 
 ROOT = Path(__file__).resolve().parents[1]
 reference, historical, incoming, decisions = load_library(ROOT)

@@ -1,4 +1,4 @@
-"""Build a read-only, synthetic-only snapshot for static ChugChug hosting.
+"""Build a read-only, synthetic-only snapshot for static Chug hosting.
 
 Run from any working directory:
     python3 scripts/export_public_demo.py
@@ -20,7 +20,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # Allow direct script execution from any directory.
 
-from chugchug.server import App
+from chug.server import App
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -47,7 +47,7 @@ def export(destination: Path) -> None:
     if destination.exists():
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
-    with tempfile.TemporaryDirectory(prefix="chugchug-public-snapshot-") as temp:
+    with tempfile.TemporaryDirectory(prefix="chug-public-snapshot-") as temp:
         app = App(ROOT, Path(temp))
         write_json(destination / "queue.json", {"items": app.queue()})
         write_json(destination / "reference.json", app.reference_info())

@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chugchug.document import extract_file
-from chugchug.engine import analyse, load_library, validate_decisions
-from chugchug.server import App
+from chug.document import extract_file
+from chug.engine import analyse, load_library, validate_decisions
+from chug.server import App
 from tests.adversarial_audit import audit
 
 ROOT = Path(__file__).resolve().parents[1]
