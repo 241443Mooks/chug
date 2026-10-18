@@ -217,7 +217,9 @@ class JourneyTests(unittest.TestCase):
             flagged=app.record_contract_action('T01','flag_for_review','Reviewer','Need a second reviewer.',False)
             self.assertEqual(accepted['decision'],'approve')
             self.assertEqual(accepted['contract_action'],'accept_contract')
-            self.assertEqual(flagged['decision'],'request_amendment')
+            self.assertNotIn('decision', flagged)
+            self.assertEqual(flagged['status'], 'pending')
+            self.assertIsNone(app.queue()[next(i for i,row in enumerate(app.queue()) if row['id']=='T01')]['latest_decision'])
             self.assertEqual(flagged['contract_action'],'flag_for_review')
             self.assertEqual(len(App(ROOT,Path(temp)).detail('T01')['contract_actions']),2)
 
@@ -227,10 +229,61 @@ class JourneyTests(unittest.TestCase):
             data=(ROOT/'dataset/incoming/T01-template-match.docx').read_bytes()
             intake=app.intake(data,'incoming.docx')
             event=app.record_contract_action(intake['id'],'flag_for_review','Reviewer','Confirm which reference applies.')
-            self.assertEqual(event['decision'],'request_amendment')
+            self.assertNotIn('decision', event)
+            self.assertEqual(event['status'], 'pending')
             self.assertEqual(event['contract_action'],'flag_for_review')
             refreshed=App(ROOT,Path(temp)).intake_detail(intake['incoming']['sha256'])
-            self.assertEqual(refreshed['human_decision']['last_decision']['contract_action'],'flag_for_review')
+            self.assertIsNone(refreshed['human_decision']['last_decision'])
+            self.assertEqual(refreshed['review_state'], 'flagged')
+            self.assertEqual(refreshed['latest_flag']['contract_action'], 'flag_for_review')
+
+
+    def test_flag_keeps_contract_pending_without_amendment_or_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            flagged = app.record_contract_action('T05', 'flag_for_review', 'Reviewer', 'Ask a second reviewer.')
+            self.assertEqual(flagged['status'], 'pending')
+            self.assertEqual(flagged['contract_action'], 'flag_for_review')
+            self.assertNotIn('decision', flagged)
+            self.assertEqual(app.detail('T05')['review_state'], 'flagged')
+            self.assertIsNone(next(x for x in app.queue() if x['id'] == 'T05')['latest_decision'])
+            self.assertEqual(app.record_contract_action('T05', 'flag_for_review', 'Reviewer',
+                                                        'Ask a second reviewer.')['id'], flagged['id'])
+            persisted = App(ROOT, Path(temp))
+            self.assertEqual(len(persisted.detail('T05')['contract_actions']), 1)
+            self.assertEqual(persisted.queue()[next(i for i,x in enumerate(persisted.queue()) if x['id']=='T05')]['review_state'], 'flagged')
+
+    def test_unassessed_and_needs_further_review_require_explanation_and_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I independently checked the entire original and resolved each question.', True)
+            with self.assertRaisesRegex(ValueError, 'Explain'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer', 'Too short', True, True)
+            first = app.detail('T05')['analysis']['findings'][0]['id']
+            app.assess_finding('T05', first, 'needs_further_review', 'Reviewer', 'Specialist input needed.')
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I reviewed the outstanding specialist question and assume the risk.', True)
+            accepted = app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                'I independently checked the exact original, considered each open finding, and accept the remaining risk.',
+                True, True)
+            self.assertTrue(accepted['independent_original_reviewed'])
+            self.assertEqual(accepted['decision'], 'approve')
+
+    def test_earlier_flag_records_remain_visible_but_are_not_final_decisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            detail = app.detail('T01')
+            app.ledger.append(detail['document']['sha256'], detail['document']['filename'], 'Old reviewer',
+                'request_amendment', 'Review needed, not an actual amendment request.', [],
+                reference_sha256=detail['reference']['sha256'], contract_action='flag_for_review')
+            after = App(ROOT, Path(temp)).detail('T01')
+            self.assertEqual(after['review_state'], 'flagged')
+            self.assertEqual(len(after['contract_actions']), 1)
+            self.assertEqual(after['history'], [])
+            self.assertIsNone(next(row for row in app.queue() if row['id'] == 'T01')['latest_decision'])
 
     def test_http_queue_original_decision_refresh_and_upload(self):
         with tempfile.TemporaryDirectory() as temp:
