@@ -255,6 +255,31 @@ test('matching result exposes context, source identity, excluded candidates and 
   assert.match(result,/Confirmation and comparison have not occurred/);
 });
 
+test('new intake detail shows a provisional comparison with source anchors and truthful pending states',()=>{
+  const h=harness(items);
+  h.run('state.intake='+JSON.stringify({
+    document:{filename:'New fictional NDA.docx',units:[{anchor:'word/document.xml:p4',text:'Confidentiality lasts seven years.'}]},
+    incoming:{sha256:'abc'},family:'nda',status:'analysed_needs_review',route:'review_required',reason:'Provisional comparison is complete; a person must decide.',
+    extraction:{status:'complete'},original_url:'/api/intakes/abc/original',
+    matching:{proposal:{status:'proposed',reason:'One context-compatible reference remains.',proposal:{reference_id:'UP-123',display_name:'Fictional NDA',version:'1.0',sha256:'ref',reasons:[{dimension:'variant',value:'mutual_evaluation',evidence:[{anchor:'word/document.xml:p2',text:'Purpose: product evaluation.'}]}]}}},
+    comparison:{status:'analysed',findings:[{title:'Changed retention',explanation:'The period differs.',sources:[{anchor:'word/document.xml:p4',text:'Confidentiality lasts seven years.'}],reference:{anchor:'word/document.xml:p4',text:'Confidentiality lasts five years.'}}]},
+    analysis:{findings:[{title:'Changed retention',explanation:'The period differs.',sources:[{anchor:'word/document.xml:p4',text:'Confidentiality lasts seven years.'}],reference:{anchor:'word/document.xml:p4',text:'Confidentiality lasts five years.'}}]}
+  }));
+  const complete=h.run('intakeView(state.intake)');
+  assert.match(complete,/Proposed reference · not confirmed/);
+  assert.match(complete,/word\/document.xml:p4/);
+  assert.match(complete,/provisional NDA comparison/);
+  assert.match(complete,/Download exact incoming DOCX/);
+  assert.match(complete,/Record your review decision/);
+  assert.match(complete,/Confirm reference and compare/);
+  h.run('state.intake='+JSON.stringify({document:{filename:'Unmatched.docx',units:[]},incoming:{sha256:'pending'},family:'customer_order',status:'awaiting_reference',route:'review_required',reason:'A reviewer must confirm the reference.',extraction:{status:'complete'},matching:{proposal:{reason:'No suitable match.'}},comparison:{status:'not_run',reason:'Explicit confirmation is required.'},original_url:'/api/intakes/pending/original'}));
+  const pending=h.run('intakeView(state.intake)');
+  assert.match(pending,/Comparison not run/);
+  assert.match(pending,/Explicit confirmation is required/);
+  assert.match(pending,/Record your review decision/);
+  assert.doesNotMatch(pending,/Looks routine|Approved/);
+});
+
 test('public reference page keeps its standard upload control hidden',()=>{
   const h=harness(items,'chug.smooks.co.uk');
   const uploadControl={hidden:false};
