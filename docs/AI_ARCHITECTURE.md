@@ -84,7 +84,7 @@ The wider cross-system knowledge map described above **does not yet exist**. The
 
 ## The optional AI capability — implemented, not validated
 
-The current AI integration in [`chugchug/ai.py`](../chugchug/ai.py) uses the OpenAI Responses API for one limited task: explaining the *possible effect and uncertainty* of a selected changed clause in relation to its reference wording.
+The current AI integration in [`chug/ai.py`](../chug/ai.py) uses the OpenAI Responses API for one limited task: explaining the *possible effect and uncertainty* of a selected changed clause in relation to its reference wording.
 
 It is disabled by default. A local operator must explicitly enable it, supply credentials and configure call, input and output limits. The analysis is an explicit action on selected synthetic material, not part of routine automatic routing.
 

@@ -2,7 +2,7 @@
 
 This repository has two separate experiences:
 - `web/` is the **static, read-only public demo** using precomputed, fictional data. This is what Cloudflare Pages should host.
-- `chugchug/` is the **local Python application**. It must not be deployed as a public unauthenticated service.
+- `chug/` is the **local Python application**. It must not be deployed as a public unauthenticated service.
 
 ## Set up a fresh Git-connected Pages project
 
@@ -40,7 +40,7 @@ If the account's Pages integration cannot accept a blank command with root `web`
 From the repository root, run:
 
 ```sh
-python3 -m chugchug.server --port 8771
+python3 -m chug.server --port 8771
 ```
 
 Visit `http://127.0.0.1:8771`. Only use fictional documents. Do not expose this local server to the public Internet.

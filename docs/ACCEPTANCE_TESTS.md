@@ -1,4 +1,4 @@
-# Acceptance and safety tests — ChugChug v0.1
+# Acceptance and safety tests — Chug v0.1
 
 ## Isolation rule
 `dataset/ground_truth/expected_findings.csv` is an **evaluation oracle only**. The app must never read or index it. An isolated test harness may compare independently generated review output against it. Do not use the oracle to generate runtime detections or prompts, and do not modify it to pass tests.

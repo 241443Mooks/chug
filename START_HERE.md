@@ -58,7 +58,7 @@ You'll need Python 3.9 or newer. No additional packages, account or AI subscript
 From the downloaded project's main folder, run:
 
 ```sh
-python3 -m chugchug.server --port 8771
+python3 -m chug.server --port 8771
 ```
 
 Open the following address in your browser:
@@ -329,12 +329,12 @@ These tests provide evidence about specific technical behaviours. They are not a
 
 ### Keeping experiments separate
 
-By default, local review decisions and uploaded demonstration files are stored in `.chugchug-data/`.
+By default, local review decisions and uploaded demonstration files are stored in `.chug-data/`.
 
 To start with a fresh set of fictional decisions, launch the application with a separate state directory:
 
 ```sh
-python3 -m chugchug.server --port 8771 --state-dir ./chug-review-test
+python3 -m chug.server --port 8771 --state-dir ./chug-review-test
 ```
 
 This keeps the new experiment separate from previous local review activity.
