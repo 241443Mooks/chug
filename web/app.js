@@ -12,11 +12,11 @@ function toast(message){el('toast').textContent=message;clearTimeout(window.toas
 async function readJson(url,options){
   const response=await fetch(url,options);
   const type=(response.headers?.get('content-type')||'application/json').toLowerCase();
-  if(!type.includes('json')){const error=new Error('Chug could not read the response for this page.);error.nonJson=true;throw error}
+  if(!type.includes('json')){const error=new Error('Chug could not read the response for this page.');error.nonJson=true;throw error}
   let data;
   try{data=await response.json()}
   catch(cause){
-    const error=new Error('Chug could not read the data for this page.);
+    const error=new Error('Chug could not read the data for this page.');
     // Static hosting may return an empty 200 response for a missing Python API.
     // Only fall back to bundled data for an otherwise successful API response.
     error.nonJson=response.ok;
