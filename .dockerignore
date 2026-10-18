@@ -1,0 +1,13 @@
+.git
+.chugchug-data
+.env
+.env.*
+__pycache__
+**/__pycache__
+*.pyc
+**/*.pyc
+tests
+docs
+scripts
+research
+dataset/ground_truth

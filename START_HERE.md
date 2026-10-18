@@ -30,6 +30,8 @@ Both experiences use synthetic information. The local demonstration works withou
 
 Instructions for each experience follow below.
 
+The [private online demo guide](docs/ONLINE_DEMO.md) describes a separate authenticated container deployment for synthetic uploads. The existing public website remains read-only.
+
 ## Getting started
 
 There are two ways to explore Chug.

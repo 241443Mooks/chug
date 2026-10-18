@@ -149,3 +149,21 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Keep the four questions in order. Keep the main finding, explanation and uncertainty visible; put original/reference wording in a native disclosure and place the existing decision action immediately after the concise summary. Secondary findings, provenance, technical checks and history remain reachable through labelled disclosures or the existing evidence tabs.
 
 **Evidence and uncertainty:** The 1280 × 720 screenshot shows the action without scrolling; keyboard activation opened the existing decision form, and an Escalate decision with rationale persisted in an isolated temporary ledger. The available browser surface did not expose a viewport override, so narrow-screen layout is covered by responsive CSS and regression assertions but remains unverified in a resized browser. Creative acceptance remains with the owner.
+
+## Entry 006 — Positioning is a strategy question
+
+**Observation:** The owner describes ChugChug as “spot the difference for contracts” and is assessing strategic alignment. I interpreted this as a request to rewrite the UI; that was the wrong scope.
+
+**Strategic hypothesis:** The phrase may explain the core comparison value more directly than the current general contract-review framing. The product already compares an incoming NDA with a reference and surfaces additions, changes and missing wording with evidence.
+
+**Decision:** Keep the existing interface unchanged. Treat this positioning as a product-strategy hypothesis to assess against the current product, audience and longer-term direction before proposing experience changes.
+
+**Evidence and uncertainty:** The source comparison and evidence journey exist in the current prototype. Strategic fit and reviewer understanding have not been validated with target users; no design change or creative acceptance is claimed.
+
+## Entry 007 — Keep the interactive demo private and separate
+
+**Observation:** Chug already has a public read-only static site, while uploaded documents, review decisions and reference selection require the Python service. The service previously bound only to loopback and had no access control.
+
+**Decision:** Prepare a separate private container service for synthetic uploads. Require Basic authentication, same-origin writes and an HTTPS public-origin setting; store state on a private durable volume and support one instance only. Keep the existing public site read-only and leave model calls disabled.
+
+**Evidence and uncertainty:** The deployment image excludes the evaluation answer key and local state, runs as a non-root user and fails closed without online credentials and origin configuration. No hosting account or domain configuration is available in the repository, so live deployment, ingress limits, volume persistence and the browser journey remain unverified.
