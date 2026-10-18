@@ -42,7 +42,7 @@ The experimental branch has a workflow to run validation, produce the snapshot, 
 1. `https://chug.smooks.co.uk/demo-data/queue.json` returns `application/json` and exactly six `items`.
 2. `/demo-data/reference.json` shows the bundled fictional reference.
 3. `/demo-data/research.json` lists 8 standards, 20 ordinary-looking client files, and 4 challenge documents, all flagged as research specimens.
-4. Open the review queue, activate any review card by mouse or keyboard, then inspect Review, Compare wording, Full document, Reference, Check coverage and Review history. A direct `#/review/T03/overview` URL must open T03.
+4. Open the review queue, activate any review card by mouse or keyboard, then inspect Review, Compare documents, Full document, Reference, Checks run and Review history. A direct `#/review/T03/overview` URL must open T03. The review overview should show every finding as a source-linked item and keep its count visible across tabs.
 5. Compare wording shows every exported incoming and reference passage; finding-linked passages open their associated finding evidence. Reference shows the research specimens.
 6. Download a synthetic original DOCX from a review and the research library.
 7. Confirm the public read-only notice appears and no upload, decision, publication or AI action is offered.
