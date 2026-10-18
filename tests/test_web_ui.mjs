@@ -66,26 +66,75 @@ test('decision controls retain human outcomes, rationale and finding selection',
   assert.match(html,/name="rationale" required/);
   assert.match(html,/name="finding" value="finding-1"/);
   assert.match(html,/Recording a decision does not publish it as precedent/);
+  h.run('state.staticDemo=true');
+  const publicHtml=h.run("decisionView({analysis:{findings:[]}})");
+  assert.match(publicHtml,/Decisions happen in the private review workflow/);
+  assert.match(publicHtml,/cannot record a decision or approve a contract/);
+  assert.doesNotMatch(publicHtml,/are saved in review history/);
 });
 
-test('Falcon overview follows the four reviewer questions and puts decision entry before secondary detail',()=>{
+test('T05 overview surfaces every finding as a distinct source-linked item',()=>{
   const h=harness(items);
-  h.run('state.detail = '+JSON.stringify(falcon));
+  const detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'));
+  h.run('state.detail = '+JSON.stringify(detail));
   const html=h.run('overview(state.detail)');
-  const order=['1. What changed?','2. Why might it matter?','3. What does the original wording and reference say?','4. What should you do next?'];
-  let previous=-1;
-  for(const label of order){const at=html.indexOf(label);assert.ok(at>previous,`${label} should follow the previous review question`);previous=at;}
-  assert.match(html,/Potentially broad use or IP rights/);
-  assert.match(html,/commercially exploit all technical concepts/);
-  assert.match(html,/No intellectual property licence or other right is granted/);
+  assert.match(html,/>4 things to check</);
+  assert.match(html,/We’ve found 4 things worth looking at before you decide what to do\./);
+  assert.equal((html.match(/class="finding-summary"/g)||[]).length,4);
+  for(const finding of detail.analysis.findings){
+    assert.ok(html.includes(finding.title),`missing finding title ${finding.title}`);
+    assert.ok(html.includes(`data-anchor="${finding.sources[0].anchor}"`),`missing source link ${finding.id}`);
+  }
+  assert.match(html,/Schedule 1 — Additional Terms/);
+  assert.match(html,/Despite clause 3, the receiving party may use/);
+  assert.match(html,/Schedule prevails/);
+  assert.doesNotMatch(html,/Paragraph 33|Paragraph 34/);
   assert.match(html,/data-open-decision aria-controls="decision-section"/);
-  assert.ok(html.indexOf('data-open-decision')<html.indexOf('Other findings'));
   assert.match(html,/<details class="decision-disclosure" id="decision-section">/);
-  assert.match(html,/<details class="other-findings">/);
   assert.match(html,/<details class="finding-tools">/);
-  assert.match(html,/Pattern-based flag; a reviewer must interpret the complete provision/);
+  assert.match(html,/Not reviewed yet/);
+  assert.match(h.run('reviewNav(state.detail)'),/4 things to check/);
+  assert.match(h.run('reviewNav(state.detail)'),/Checks run/);
   assert.match(css,/\.next-step\{[^}]*justify-content:space-between/);
-  assert.match(css,/@media\(max-width:700px\)[\s\S]*?\.decision-action\{width:100%\}/);
+  assert.match(css,/\.finding-summary\{[^}]*display:flex/);
+});
+
+test('reference wording distinguishes evidenced additions from unclear matches',()=>{
+  const h=harness(items);
+  h.run('state.detail = '+JSON.stringify(JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'))));
+  const detail=h.run('state.detail');
+  const added=detail.analysis.findings.find(f=>f.category==='added_section');
+  const unmatched=h.run(`sourceBox(null,'Reference wording','reference',${JSON.stringify(added)})`);
+  assert.match(unmatched,/Reference document/);
+  assert.match(unmatched,/No matching clause found/);
+  assert.match(unmatched,/This clause appears in the incoming contract but not in the reference/);
+  assert.doesNotMatch(unmatched,/problem|breach|unacceptable/i);
+  const unclear=h.run("sourceBox(null,'Reference wording','reference',{category:'override'})");
+  assert.match(unclear,/No clear match found/);
+  assert.match(unclear,/couldn’t confirm a matching passage/);
+  assert.doesNotMatch(unclear,/No matching clause found/);
+});
+
+test('T05 findings 2 and 4 survive the finding → comparison → finding round trip',async()=>{
+  const h=harness(items);
+  const detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'));
+  h.run('state.id="T05"; state.detail='+JSON.stringify(detail)+'; api=async()=>state.detail; renderQueue=()=>{}; renderPage=()=>{}');
+  const comparison=h.run('comparisonView(state.detail)');
+  const p33=comparison.slice(comparison.indexOf('id="word/document.xml:p33"'),comparison.indexOf('</div></li>',comparison.indexOf('id="word/document.xml:p33"')));
+  const p34=comparison.slice(comparison.indexOf('id="word/document.xml:p34"'),comparison.indexOf('</div></li>',comparison.indexOf('id="word/document.xml:p34"')));
+  assert.match(p33,/data-open-comparison-finding="1"/);
+  assert.match(p33,/data-open-comparison-finding="3"/);
+  assert.match(p34,/data-open-comparison-finding="2"/);
+  for(const findingIndex of [1,3]){
+    const finding=detail.analysis.findings[findingIndex];
+    await h.run(`setTab('comparison',${JSON.stringify(finding.sources[0].anchor)},${findingIndex})`);
+    assert.equal(h.run('route().findingIndex'),findingIndex);
+    assert.equal(h.run('state.tab'),'comparison');
+    h.run('state.detail='+JSON.stringify(detail));
+    h.run('render()');
+    assert.equal(h.node(`finding-${findingIndex}`).open,true,`finding ${findingIndex+1} should be opened directly`);
+    h.node(`finding-${findingIndex}`).open=false;
+  }
 });
 
 test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
@@ -186,9 +235,11 @@ test('public Cloudflare hostname reads the static queue directly and blocks writ
 test('slash-prefixed public review deep links resolve the selected review and tab',()=>{
   const h=harness(items,'chug.smooks.co.uk');
   h.location.hash='#/review/T03/overview';
-  assert.deepEqual({...h.run('route()')},{page:'review',id:'T03',tab:'overview',anchor:null});
+  assert.deepEqual({...h.run('route()')},{page:'review',id:'T03',tab:'overview',anchor:null,findingIndex:null});
   h.location.hash='#/review/T05/comparison';
-  assert.deepEqual({...h.run('route()')},{page:'review',id:'T05',tab:'comparison',anchor:null});
+  assert.deepEqual({...h.run('route()')},{page:'review',id:'T05',tab:'comparison',anchor:null,findingIndex:null});
+  h.location.hash='#/review/T05/comparison/word%2Fdocument.xml%3Ap34/3';
+  assert.deepEqual({...h.run('route()')},{page:'review',id:'T05',tab:'comparison',anchor:'word/document.xml:p34',findingIndex:3});
 });
 
 test('public queue renders every precomputed review as an open-review button',()=>{
@@ -221,9 +272,9 @@ test('full comparison exposes all exported wording and links finding passages',(
   const h=harness(items,'chug.smooks.co.uk');
   h.run('state.detail='+JSON.stringify(falcon));
   const html=h.run('comparisonView(state.detail)');
-  assert.match(html,/Full wording comparison/);
+  assert.match(html,/Compare documents/);
   assert.match(html,/Applicable reference/);
-  assert.match(html,/data-finding-index=/);
+  assert.match(html,/data-open-comparison-finding=/);
   assert.match(html,new RegExp(`${falcon.document.units.length} incoming passages`));
   assert.match(html,new RegExp(`${falcon.reference.units.length} reference passages`));
   for(const unit of falcon.document.units)assert.ok(html.includes(unit.text),`incoming wording missing: ${unit.anchor}`);

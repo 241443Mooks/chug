@@ -181,3 +181,19 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Keep the public site static and read-only, move its notice below the header, give the queue and selected review the available width, and let every synthetic review open from a native button. Normalize an optional leading slash in hash routes. Show complete incoming and applicable-reference wording side by side and link finding passages to the exported finding details; do not imply that unflagged wording is equivalent.
 
 **Evidence and uncertainty:** Automated coverage now includes slash-prefixed deep links, every queue card, all six exported review comparisons and transient-only public filters. A local Chrome walkthrough opened the direct T03 URL, opened a queue card by keyboard, inspected the paired wording and finding evidence, and exercised browser back. Deployed-host behavior, mobile rendering and human creative acceptance remain unverified before the change is ready for review.
+
+## Issue #19 — Make findings and review language easier to scan
+
+**Observation:** T05 has four findings, but the overview treated one as primary and hid the rest under an “other findings” disclosure. Its two conflict findings came from different paragraphs in the same schedule. The public decision panel also presented save language next to a read-only warning.
+
+**Decision:** Give every finding an equally visible numbered link from the overview, label its source section and paragraph, and keep the total beside the review tabs. Use “No matching clause found” only for an explicitly added-section finding; other missing pairings say that Chug could not confirm a clear match. Replace the named technical headings with reviewer language and explain that public decisions happen in the private workflow and cannot be recorded in the demo. Keep detailed coverage, hashes, source passages and correction tools available.
+
+**Evidence and uncertainty:** Targeted UI tests cover the four T05 findings, distinct paragraph context, navigation anchors, the persistent count, and absent versus unclear reference matches. Browser screenshots and mobile rendering still require human review; no analysis rules or findings changed. Creative acceptance remains with the owner.
+
+## Issue #19 review correction — preserve finding identity and source meaning
+
+**Observation:** Multiple findings can cite the same extracted source passage. Navigating by passage alone reopened the first finding, and XML paragraph indexes were labelled as contract paragraph numbers even when the contract had none.
+
+**Decision:** Carry the selected finding index in the comparison route, open that finding directly, and give every finding associated with a passage its own comparison link. Describe XML anchors as source passages; show the schedule heading with a short wording excerpt in the overview.
+
+**Evidence and uncertainty:** The UI regression suite checks the T05 second and fourth findings through the comparison round trip, verifies all findings attached to shared passages are exposed, and confirms the overview no longer calls XML positions contractual paragraphs. Browser screenshots and mobile rendering still need review; human creative acceptance remains pending.
