@@ -340,7 +340,7 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
   assert.match(h.run('helpView()'),/What is a reference/);
-  assert.match(h.run('helpView()'),/public demo only shows fictional examples/);
+  assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
 });
 
 test('public reference view is read-only and keeps standards separate from incoming examples',()=>{
@@ -437,9 +437,12 @@ test('public pages use clear tasks and keep human decision limits visible',()=>{
   assert.match(home,/You decide what happens next/);
   assert.match(queue,/These labels help you choose what to check/);
   assert.match(help,/Open the review queue/);
-  assert.match(help,/You cannot save a decision on this public site/);
-  assert.match(help,/A past decision does not approve a new contract/);
-  assert.match(help,/AI cannot approve a contract/);
+  assert.match(help,/public demo shows the review process but cannot save a decision/);
+  assert.match(help,/Past decisions and reviewer corrections can provide context/);
+  assert.match(help,/Optional AI comparison cannot approve a contract/);
+  assert.match(help,/Open Compare documents/);
+  assert.match(help,/person must confirm that the reference applies/);
+  assert.match(help,/public site is read-only/);
   const history=readFileSync(new URL('../web/decision-log.html',import.meta.url),'utf8');
   assert.match(history,/These decisions are made up/);
   assert.match(history,/Do not use these examples as approval/);
