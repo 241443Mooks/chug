@@ -934,8 +934,10 @@ class App:
             reference_sha256 = detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")
             findings = (detail.get("analysis") or {}).get("findings") or detail.get("comparison", {}).get("findings") or detail.get("comparison", {}).get("observations", [])
         if action == "flag_for_review":
+            prior = self._review_records(source_sha256, reference_sha256, legacy=document_id in self.contracts)
             return self.review_flags.append(sha256=source_sha256, filename=filename, reviewer=reviewer,
-                                            rationale=rationale, reference_sha256=reference_sha256)
+                                            rationale=rationale, reference_sha256=reference_sha256,
+                                            reuse_last_if_same=prior["review_state"] == "flagged")
         if independent_original_reviewed is not True:
             raise ValueError("Before accepting, confirm that you independently reviewed the exact incoming original document")
         assessments = detail.get("latest_finding_assessments", {})
