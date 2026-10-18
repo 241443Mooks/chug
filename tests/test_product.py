@@ -270,7 +270,21 @@ class JourneyTests(unittest.TestCase):
                 'I independently checked the exact original, considered each open finding, and accept the remaining risk.',
                 True, True)
             self.assertTrue(accepted['independent_original_reviewed'])
+            self.assertTrue(accepted['unresolved_findings_acknowledged'])
             self.assertEqual(accepted['decision'], 'approve')
+            self.assertTrue(App(ROOT, Path(temp)).detail('T05')['history'][-1]['unresolved_findings_acknowledged'])
+
+    def test_direct_legacy_approval_endpoint_requires_review_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            detail = app.detail('T05')
+            original = detail['document']
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I checked the original and every remaining issue.', True)
+            with self.assertRaisesRegex(ValueError, 'original'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I checked the original and every remaining issue.', False, True)
 
     def test_earlier_flag_records_remain_visible_but_are_not_final_decisions(self):
         with tempfile.TemporaryDirectory() as temp:
