@@ -114,7 +114,7 @@ def _rank_by_scope(item, incoming_text):
 
 
 def extract_context(document: dict) -> dict:
-    """Extract applicability facts with exact source anchors from an extracted DOCX."""
+    """Extract applicability facts with exact source anchors from a supported source."""
     if document.get("coverage", {}).get("status") != "complete":
         return {"status": "blocked_extraction", "dimensions": {}}
     units = document.get("units", [])
@@ -210,7 +210,7 @@ def uploaded_reference_metadata(document: dict, display_name: str, version: str 
     if document.get("coverage", {}).get("status") != "complete":
         raise ValueError("Reference extraction is incomplete: " + "; ".join(document.get("coverage", {}).get("issues", [])))
     if family_dimension.get("state") != "known":
-        raise ValueError("Could not determine one supported reference family from the extracted DOCX")
+        raise ValueError("Could not determine one supported reference family from the extracted source")
     family = family_dimension["value"]
     if family not in {"nda", "customer_order"}:
         raise ValueError("Only synthetic NDA and customer-order references are supported")
@@ -246,7 +246,7 @@ def uploaded_reference_metadata(document: dict, display_name: str, version: str 
         "version": version.strip(),
         "status": "active",
         "provenance": "locally_uploaded_synthetic_reference",
-        "extraction": {"status": document["coverage"]["status"], "limitations": list(document["coverage"].get("issues", [])), "passage_count": len(document.get("units", [])), "parts": list(document["coverage"].get("parts", []))},
+        "extraction": {"status": document["coverage"]["status"], "limitations": [*document["coverage"].get("issues", []), *document["coverage"].get("limitations", [])], "passage_count": len(document.get("units", [])), "parts": list(document["coverage"].get("parts", []))},
     }
 
 

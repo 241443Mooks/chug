@@ -212,3 +212,11 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Carry the selected finding index in the comparison route, open that finding directly, and give every finding associated with a passage its own comparison link. Describe XML anchors as source passages; show the schedule heading with a short wording excerpt in the overview.
 
 **Evidence and uncertainty:** The UI regression suite checks the T05 second and fourth findings through the comparison round trip, verifies all findings attached to shared passages are exposed, and confirms the overview no longer calls XML positions contractual paragraphs. Browser screenshots and mobile rendering still need review; human creative acceptance remains pending.
+
+## Issue #14 — Preserve PDF page evidence and expose uncertainty
+
+**Observation:** A text PDF can enter the same family-aware comparison flow as DOCX only if its extracted units keep page anchors and its original bytes remain untouched. Layout extraction alone cannot establish that stamps, annotations, forms, layers or column order were fully accounted for.
+
+**Decision:** Emit ordered PDF line units with page-and-line anchors into the existing extraction contract. Allow clean born-digital text through matching, and block detected or ambiguous non-text/layout content with a visible reason. Preserve the original PDF for human inspection and keep signature verification explicitly out of scope.
+
+**Evidence and uncertainty:** Synthetic tests cover family/context matching across DOCX and PDF, a changed clause with page evidence, blocked scan-like/encrypted/malformed inputs, persistence and exact PDF download headers and bytes. Detection remains conservative but cannot replace visual review; real PDF layouts and human experience have not been validated.

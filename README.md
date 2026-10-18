@@ -52,6 +52,8 @@ I've built a small working prototype using fictional commercial contracts to exp
 
 Chug compares incoming contracts against reference standards, highlights differences and makes relevant previous decisions easier to find.
 
+The local fictional Legal workflow accepts DOCX and text-based PDF references and incoming contracts. PDF files are retained byte-for-byte and use page-linked source anchors. Scans, malformed/encrypted files and detected layout or hidden-content ambiguities are retained for inspection where possible, but blocked from matching and analysis. The public static demo remains read-only and does not accept uploads.
+
 It also captures decisions made during the review process, preserving their connection to the original documents and evidence.
 
 The comparison works without AI. People remain responsible for interpreting the information and making decisions.

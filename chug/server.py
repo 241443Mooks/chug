@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import mimetypes
 import os
 import re
 import shutil
@@ -16,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote, quote
 
 from .ai import AIService, AIUnavailable
-from .document import extract
+from .document import extract, media_type_for, source_extension
 from .nda_pack import NDAPack
 from .customer_order_review import CustomerOrderReview
 from .ledger import IntakeConfirmationLedger, KnowledgeLedger, Ledger
@@ -48,7 +47,7 @@ class App:
             if list(uploads.glob("*.uploading")) or list(uploads.glob("*.recording")):
                 raise ValueError("Upload recovery required: interrupted write detected")
             metadata = {path.stem: path for path in uploads.glob("*.json")}
-            originals = {path.stem: path for path in uploads.glob("*.docx")}
+            originals = {path.stem: path for path in uploads.iterdir() if path.is_file() and path.suffix.lower() in {".docx", ".pdf"}}
             if set(metadata) != set(originals):
                 raise ValueError("Upload recovery required: original and metadata files do not match")
             for stem, meta_path in metadata.items():
@@ -199,7 +198,7 @@ class App:
         if list(directory.glob("*.uploading")) or list(directory.glob("*.recording")):
             raise ValueError("Reference matching recovery required: interrupted write detected")
         metadata = {path.stem: path for path in directory.glob("*.json")}
-        originals = {path.stem: path for path in directory.glob("*.docx")}
+        originals = {path.stem: path for path in directory.iterdir() if path.is_file() and path.suffix.lower() in {".docx", ".pdf"}}
         if set(metadata) != set(originals):
             raise ValueError("Reference matching recovery required: original and proposal records do not match")
         for digest, meta_path in metadata.items():
@@ -267,8 +266,8 @@ class App:
             self.intakes[digest] = {"document": document, "path": path, "record": record}
 
     def intake(self, data, filename):
-        if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
-            raise ValueError("Choose one synthetic DOCX under 2 MB")
+        if not isinstance(filename, str) or Path(filename).suffix.lower() not in {".docx", ".pdf"} or len(data) > 2_000_000:
+            raise ValueError("Choose one synthetic DOCX or PDF under 2 MB")
         document = extract(data, filename)
         return self.intake_extracted(data, document)
 
@@ -315,6 +314,7 @@ class App:
 
         record = {
             "incoming": {"filename": document["filename"], "sha256": digest},
+            "format": document.get("format", Path(document["filename"]).suffix.lower().lstrip(".")),
             "extracted_document": document,
             "family": family,
             "extraction": document["coverage"],
@@ -328,7 +328,7 @@ class App:
         }
         directory = self.state_dir / "intakes"
         directory.mkdir(parents=True, exist_ok=True)
-        suffix = Path(document["filename"]).suffix.lower() or ".source"
+        suffix = source_extension(document)
         original = directory / (digest + suffix)
         temporary = directory / (digest + ".uploading")
         with temporary.open("xb") as handle:
@@ -456,8 +456,8 @@ class App:
         return sorted(rows, key=lambda row: (-self.pack.route_order[row["route"]], row["id"]))
 
     def match_reference(self, data, filename):
-        if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
-            raise ValueError("Choose one synthetic DOCX under 2 MB")
+        if not isinstance(filename, str) or Path(filename).suffix.lower() not in {".docx", ".pdf"} or len(data) > 2_000_000:
+            raise ValueError("Choose one synthetic DOCX or PDF under 2 MB")
         document = extract(data, filename)
         return self.match_reference_extracted(data, document)
 
@@ -475,6 +475,8 @@ class App:
         proposal["excluded"].extend(unavailable)
         record = {
             "incoming": {"filename": document["filename"], "sha256": digest},
+            "format": document.get("format", Path(document["filename"]).suffix.lower().lstrip(".")),
+            "extraction": document["coverage"],
             "extracted_document": document,
             "assessed_at": datetime.now(timezone.utc).isoformat(),
             "proposal": proposal,
@@ -484,7 +486,7 @@ class App:
         }
         directory = self.state_dir / "reference_matches"
         directory.mkdir(parents=True, exist_ok=True)
-        suffix = Path(filename).suffix.lower() or ".source"
+        suffix = source_extension(document)
         original = directory / (digest + suffix)
         meta_path = directory / (digest + ".json")
         temporary = directory / (digest + ".uploading")
@@ -630,8 +632,8 @@ class App:
         return self.reference_info()
 
     def upload_reference(self, data, filename):
-        if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
-            raise ValueError("Choose one synthetic DOCX under 2 MB")
+        if not isinstance(filename, str) or Path(filename).suffix.lower() not in {".docx", ".pdf"} or len(data) > 2_000_000:
+            raise ValueError("Choose one synthetic DOCX or PDF under 2 MB")
         document = extract(data, filename)
         display_name = Path(filename).stem
         version = "1.0"
@@ -650,7 +652,7 @@ class App:
             return result
         directory = self.state_dir / "references"
         directory.mkdir(parents=True, exist_ok=True)
-        original = directory / (digest + ".docx")
+        original = directory / (digest + source_extension(document))
         metadata = directory / (digest + ".json")
         temporary = directory / (digest + ".uploading")
         with temporary.open("xb") as handle:
@@ -838,8 +840,8 @@ class App:
         return {"id": document_id, "display_name": self.pack.display_name(document), "document": document, "reference": self.references[reference_sha256]["document"], "reference_kind": self.references[reference_sha256]["kind"], "analysis": analysis, "history": history, "publications": publications, "corrections": self.correction_history(document_id), "ai": self.ai.status(), "ai_results": self.ai_results.get((document["sha256"], reference_sha256), [])}
 
     def upload(self, data, filename):
-        if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
-            raise ValueError("Choose one synthetic DOCX under 2 MB")
+        if not isinstance(filename, str) or Path(filename).suffix.lower() not in {".docx", ".pdf"} or len(data) > 2_000_000:
+            raise ValueError("Choose one synthetic DOCX or PDF under 2 MB")
         document = extract(data, filename)
         reference_sha256 = self.active_reference_sha256
         document_id = "U-" + document["sha256"][:10] + ("" if reference_sha256 == self.bundled_reference_sha256 else "-" + reference_sha256[:8])
@@ -847,7 +849,7 @@ class App:
             raise ValueError("Upload ID collision; source cannot be safely associated with this reference")
         target = self.state_dir / "uploads"
         target.mkdir(parents=True, exist_ok=True)
-        file_path = target / (document["sha256"] + ".docx")
+        file_path = target / (document["sha256"] + source_extension(document))
         if not file_path.exists():
             temporary = target / (document["sha256"] + ".uploading")
             with temporary.open("xb") as handle:
@@ -903,18 +905,18 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Request size is missing or exceeds the local limit")
         return self.rfile.read(length)
 
-    def _multipart_docx(self):
+    def _multipart_document(self):
         content_type = self.headers.get("Content-Type", "")
         if not content_type.startswith("multipart/form-data;"):
-            raise ValueError("Choose a DOCX file")
+            raise ValueError("Choose a DOCX or PDF file")
         data = self._body()
         message = BytesParser(policy=policy.default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode() + b"\r\n\r\n" + data)
         files = [part for part in message.iter_parts() if part.get_param("name", header="content-disposition") == "file"] if message.is_multipart() else []
         if len(files) != 1:
-            raise ValueError("Choose one DOCX file")
+            raise ValueError("Choose one DOCX or PDF file")
         filename = files[0].get_filename() or "uploaded.docx"
-        if not filename.lower().endswith(".docx"):
-            raise ValueError("DOCX only")
+        if Path(filename).suffix.lower() not in {".docx", ".pdf"}:
+            raise ValueError("Choose a DOCX or PDF file")
         return files[0].get_payload(decode=True), filename
 
     def do_GET(self):
@@ -936,8 +938,10 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.app.intakes[intake_detail.group(1)]["path"].read_bytes()
                 self.send_response(200)
                 filename = self.app.intakes[intake_detail.group(1)]["document"]["filename"]
-                self.send_header("Content-Type", mimetypes.guess_type(filename)[0] or "application/octet-stream")
-                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(Path(filename).name))
+                source = self.app.intakes[intake_detail.group(1)]["document"]
+                original_name = Path(filename).stem + source_extension(source)
+                self.send_header("Content-Type", media_type_for(source))
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(original_name))
                 self.send_header("Content-Length", str(len(data)))
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
@@ -970,8 +974,9 @@ class Handler(BaseHTTPRequestHandler):
             if hashlib.sha256(data).hexdigest() != match_original.group(1):
                 return self._error(409, "Incoming original identity changed")
             self.send_response(200)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            self.send_header("Content-Disposition", 'attachment; filename="incoming-standard-match.docx"')
+            extension = item["path"].suffix.lower()
+            self.send_header("Content-Type", media_type_for(item["document"]))
+            self.send_header("Content-Disposition", f'attachment; filename="incoming-standard-match{extension}"')
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -1018,8 +1023,9 @@ class Handler(BaseHTTPRequestHandler):
             if hashlib.sha256(data).hexdigest() != reference_original.group(1):
                 return self._error(409, "Reference original identity changed")
             self.send_response(200)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            self.send_header("Content-Disposition", 'attachment; filename="reference.docx"')
+            extension = item["path"].suffix.lower()
+            self.send_header("Content-Type", media_type_for(item["document"]))
+            self.send_header("Content-Disposition", f'attachment; filename="reference{extension}"')
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -1036,8 +1042,9 @@ class Handler(BaseHTTPRequestHandler):
             if hashlib.sha256(data).hexdigest() != item["metadata"]["sha256"]:
                 return self._error(409, "Reference original identity changed")
             self.send_response(200)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            self.send_header("Content-Disposition", 'attachment; filename="reference.docx"')
+            extension = item["path"].suffix.lower()
+            self.send_header("Content-Type", media_type_for(item["document"]))
+            self.send_header("Content-Disposition", f'attachment; filename="reference{extension}"')
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -1061,8 +1068,9 @@ class Handler(BaseHTTPRequestHandler):
             if hashlib.sha256(data).hexdigest() != self.app.contracts[document_id]["document"]["sha256"]:
                 return self._error(409, "Original source identity changed; stop review and inspect local files")
             self.send_response(200)
-            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            self.send_header("Content-Disposition", 'attachment; filename="contract.docx"')
+            extension = self.app.contracts[document_id]["path"].suffix.lower()
+            self.send_header("Content-Type", media_type_for(self.app.contracts[document_id]["document"]))
+            self.send_header("Content-Disposition", f'attachment; filename="contract{extension}"')
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -1082,16 +1090,16 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/api/upload":
-                data, filename = self._multipart_docx()
+                data, filename = self._multipart_document()
                 return self._json({"id": self.app.upload(data, filename)}, 201)
             if path == "/api/intakes":
-                data, filename = self._multipart_docx()
+                data, filename = self._multipart_document()
                 return self._json(self.app.intake(data, filename), 201)
             if path == "/api/reference-matches":
-                data, filename = self._multipart_docx()
+                data, filename = self._multipart_document()
                 return self._json(self.app.match_reference(data, filename), 201)
             if path == "/api/reference/upload":
-                data, filename = self._multipart_docx()
+                data, filename = self._multipart_document()
                 return self._json(self.app.upload_reference(data, filename), 201)
             body = json.loads(self._body(100_000))
             if not isinstance(body, dict):

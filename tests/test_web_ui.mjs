@@ -137,10 +137,10 @@ test('T05 findings 2 and 4 survive the finding → comparison → finding round 
   }
 });
 
-test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
+test('Add DOCX or PDF is a keyboard-operable native button wired to the existing picker',()=>{
   const h=harness(items);
-  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX<\/button>/);
-  assert.match(html,/<input id="upload" type="file" accept="\.docx" hidden>/);
+  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX or PDF<\/button>/);
+  assert.match(html,/<input id="upload" type="file" accept="\.docx,\.pdf" hidden>/);
   assert.equal(typeof h.node('upload-trigger').onclick,'function');
   h.node('upload-trigger').onclick();
   assert.deepEqual(h.clicks,['upload']);
@@ -339,8 +339,9 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/will not suggest it for new contracts/);
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/How references work/);
   assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
+  assert.match(h.run('helpView()'),/text-based PDF content in the local workflow/);
 });
 
 test('public reference view is read-only and keeps standards separate from incoming examples',()=>{
@@ -362,6 +363,7 @@ test('matching result exposes context, source identity, excluded candidates and 
   h.run('state.matchResult='+JSON.stringify({incoming:{filename:'incoming.docx',sha256:'abc'},assessed_at:'2026-10-18',original_url:'/incoming.docx',proposal:{status:'proposed',reason:'One context-compatible reference remains.',human_confirmation_required:true,comparison_allowed:false,proposal:{reference_id:'UP-123',display_name:'Fictional order',status:'active',version:'1.0',sha256:'123',reasons:[{dimension:'variant',value:'desktop_seats',evidence:[{anchor:'word/document.xml:p2',text:'Direct desktop order'}]}]},context:{dimensions:{channel:{state:'known',value:'direct',evidence:[]}}},excluded:[{display_name:'Old order',status:'withdrawn',reasons:['inactive standards are excluded from new matches']}]}}));
   const result=h.run('matchResultView(state.matchResult)');
   assert.match(result,/Fictional order/);
+  assert.match(result,/extraction status unavailable/);
   assert.match(result,/word\/document.xml:p2/);
   assert.match(result,/withdrawn/);
   assert.match(result,/Human decision required/);
@@ -403,6 +405,13 @@ test('new intake detail shows a provisional comparison with source anchors and t
   assert.match(blocked,/Extraction: blocked\. Comparison: not_run/);
   assert.match(blocked,/role="alert"/);
   assert.ok(blocked.indexOf('Analysis incomplete')<blocked.indexOf('Record your review decision'));
+  h.run('state.intake='+JSON.stringify({document:{filename:'Scanned.pdf',format:'pdf',units:[{anchor:'pdf:p1:l1',part:'word/document.xml',text:'Visible page text'}],coverage:{status:'blocked',issues:['Page 2 has no extractable text; OCR/manual review is required'],parts:['pdf:page:1','pdf:page:2'],limitations:['Signatures are not verified']}},incoming:{sha256:'pdf-hash'},family:null,status:'blocked_extraction',route:'blocked_extraction',reason:'Page 2 requires OCR/manual review.',extraction:{status:'blocked'},matching:{proposal:{reason:'Extraction is incomplete.'}},comparison:{status:'not_run',reason:'Extraction is incomplete; comparison was not performed.'},original_url:'/api/intakes/pdf-hash/original'}));
+  const blockedPdf=h.run('intakeView(state.intake)');
+  assert.match(blockedPdf,/Incoming PDF/);
+  assert.match(blockedPdf,/Page 2 requires OCR\/manual review/);
+  assert.match(blockedPdf,/pdf:p1:l1/);
+  assert.match(blockedPdf,/Download exact incoming PDF/);
+  assert.match(blockedPdf,/Signatures are not verified/);
   h.run('state.intake='+JSON.stringify({document:{filename:'Prior review.docx',units:[]},incoming:{sha256:'old'},family:'nda',status:'analysed_needs_review',route:'review_required',reason:'Saved comparison.',extraction:{status:'complete'},source_integrity:{incoming:'verified',reference:'unavailable'},matching:{proposal:{reason:'Previously selected.'}},comparison:{status:'analysed',findings:[]},original_url:'/api/intakes/old/original'}));
   assert.match(h.run('intakeView(state.intake)'),/Reference source unavailable/);
   h.run('state.intake.source_integrity.reference="not_linked"');
@@ -422,7 +431,7 @@ test('selected reference view preserves source identity and avoids an approval c
   h.run('state.detail='+JSON.stringify(falcon));
   const html=h.run('referenceTextView(state.detail)');
   assert.match(html,/Reference used for this review/);
-  assert.match(html,/bundled synthetic mutual NDA baseline bound to this precomputed review/);
+  assert.match(html,/is the recorded reference for this comparison/);
   assert.match(html,new RegExp(falcon.reference.sha256));
   assert.match(html,/do not establish current organisational approval/);
 });
