@@ -50,7 +50,7 @@ test('Home counts pending work and each category opens its filtered queue',async
   assert.equal(h.node('filter').value,'escalate');
   assert.match(h.node('queue').innerHTML,/Falcon/);
   assert.doesNotMatch(h.node('queue').innerHTML,/Elm|Brookside/);
-  assert.equal(h.storage.get('chugchug.queueFilter'),'escalate');
+  assert.equal(h.storage.get('chug.queueFilter'),'escalate');
   await h.run("navigate('queue','review_required')");
   assert.match(h.node('queue').innerHTML,/Brookside/);
   assert.doesNotMatch(h.node('queue').innerHTML,/Falcon/);
@@ -109,7 +109,7 @@ test('Start reviewing carries the next contract category back to the queue',asyn
   await h.run('startReviewing()');
   assert.equal(h.context.selectedId,'T03');
   assert.equal(h.run('state.filter'),'escalate');
-  assert.equal(h.storage.get('chugchug.queueFilter'),'escalate');
+  assert.equal(h.storage.get('chug.queueFilter'),'escalate');
 });
 
 test('static hosting falls back to synthetic snapshot and refuses writes',async()=>{

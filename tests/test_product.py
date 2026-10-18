@@ -12,11 +12,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from chugchug.ai import AIService, AIUnavailable
-from chugchug.document import extract, extract_file
-from chugchug.engine import analyse, load_library
-from chugchug.ledger import Ledger
-from chugchug.server import App, Handler
+from chug.ai import AIService, AIUnavailable
+from chug.document import extract, extract_file
+from chug.engine import analyse, load_library
+from chug.ledger import Ledger
+from chug.server import App, Handler
 
 ROOT = Path(__file__).resolve().parents[1]
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -146,7 +146,7 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(any(f['title']=='Changed: Parties and Purpose' for f in report['findings']))
 
     def test_no_runtime_answer_key_reference(self):
-        for path in (ROOT/'chugchug').glob('*.py'):
+        for path in (ROOT/'chug').glob('*.py'):
             self.assertNotIn('ground_truth',path.read_text())
 
 
@@ -154,7 +154,7 @@ class AITests(unittest.TestCase):
     def setUp(self):
         self.ref,self.hist,self.docs,self.dec=load_library(ROOT)
         self.finding=analyse(self.ref,self.docs['T06'],self.hist,self.dec)['findings'][0]
-        self.env={'CHUGCHUG_AI_ENABLED':'1','OPENAI_API_KEY':'test-only','CHUGCHUG_AI_SESSION_CAP':'2','CHUGCHUG_AI_DOCUMENT_CAP':'1','CHUGCHUG_AI_MAX_OUTPUT_TOKENS':'300','CHUGCHUG_AI_MAX_INPUT_CHARS':'10000','CHUGCHUG_AI_MODEL':'gpt-4o-mini'}
+        self.env={'CHUG_AI_ENABLED':'1','OPENAI_API_KEY':'test-only','CHUG_AI_SESSION_CAP':'2','CHUG_AI_DOCUMENT_CAP':'1','CHUG_AI_MAX_OUTPUT_TOKENS':'300','CHUG_AI_MAX_INPUT_CHARS':'10000','CHUG_AI_MODEL':'gpt-4o-mini'}
 
     def test_disabled_by_default(self):
         with self.assertRaises(AIUnavailable):AIService(environment={}).analyse('hash',self.finding,self.ref)
@@ -175,7 +175,7 @@ class AITests(unittest.TestCase):
     def test_provider_failure_and_input_limit_fail_closed(self):
         def timed_out(request,timeout):raise TimeoutError('simulated')
         with self.assertRaises(AIUnavailable):AIService(opener=timed_out,environment=self.env).analyse('hash',self.finding,self.ref)
-        short={**self.env,'CHUGCHUG_AI_MAX_INPUT_CHARS':'20'}
+        short={**self.env,'CHUG_AI_MAX_INPUT_CHARS':'20'}
         with self.assertRaises(AIUnavailable):AIService(opener=lambda request,timeout:None,environment=short).analyse('hash',self.finding,self.ref)
 
 
@@ -189,8 +189,8 @@ class JourneyTests(unittest.TestCase):
             def get(path):return json.load(urllib.request.urlopen(base+path))
             try:
                 home=urllib.request.urlopen(base+'/').read().decode()
-                self.assertIn('<title>ChugChug · Contract review</title>', home)
-                self.assertIn('class="brand">ChugChug', home)
+                self.assertIn('<title>Chug · Contract review</title>', home)
+                self.assertIn('class="brand">Chug', home)
                 queue=get('/api/queue')['items']
                 self.assertEqual(len(queue),6)
                 self.assertEqual(queue[0]['route'],'escalate')
@@ -204,7 +204,7 @@ class JourneyTests(unittest.TestCase):
                 self.assertEqual(len(get('/api/contracts/T03')['history']),1)
                 reloaded=App(ROOT,Path(temp))
                 self.assertEqual(len(reloaded.detail('T03')['history']),1)
-                boundary='chugchug-boundary'; file=(ROOT/'dataset/incoming/T01-template-match.docx').read_bytes()
+                boundary='chug-boundary'; file=(ROOT/'dataset/incoming/T01-template-match.docx').read_bytes()
                 multipart=(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="T01.docx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode()+file+(f'\r\n--{boundary}--\r\n').encode()
                 request=urllib.request.Request(base+'/api/upload',data=multipart,headers={'Content-Type':'multipart/form-data; boundary='+boundary,'X-Filename':'uploaded-synthetic.docx'},method='POST')
                 uploaded=json.load(urllib.request.urlopen(request))['id']

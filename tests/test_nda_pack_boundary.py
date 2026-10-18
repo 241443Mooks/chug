@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chugchug.nda_pack import NDAPack
-from chugchug.server import App
+from chug.nda_pack import NDAPack
+from chug.server import App
 
 ROOT = Path(__file__).resolve().parents[1]
 

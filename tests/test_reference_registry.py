@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chugchug.reference_registry import load_registry, propose_reference
+from chug.reference_registry import load_registry, propose_reference
 
 ROOT = Path(__file__).resolve().parents[1]
 
