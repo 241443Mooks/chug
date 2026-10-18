@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8f7f4">
-  <title>Chug · Fictional decision log</title>
+  <title>Chug · Fictional past decisions</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/decision-log.css">
   <script defer src="/decision-log.js"></script>
@@ -15,18 +15,19 @@
     <nav class="main-nav" aria-label="Main navigation">
       <a class="nav-link" href="/#home">Home</a>
       <a class="nav-link" href="/#queue">Review queue</a>
-      <a class="nav-link" href="/#reference">Reference</a>
+      <a class="nav-link" href="/#reference">References</a>
+      <a class="nav-link" href="/#help">Help</a>
       <a class="nav-link" href="/decision-log.html" aria-current="page">Decision log</a>
     </nav>
   </header>
   <main class="log-shell" id="main">
-    <p class="log-eyebrow">Demonstration data · Fictional only</p>
-    <h1>What happened last time?</h1>
-    <p class="log-lead">Explore 300 invented past decisions beside Chug's six current synthetic reviews. See recurring concerns, previously acceptable wording and issues resolved after amendment.</p>
-    <p class="log-warning"><strong>These decisions did not actually happen.</strong> Reviewers, organisations and dates are fictional. The links to current reviews and original historical examples are topic references, not supporting evidence for these invented records. Nothing here is approved guidance or an automatic decision.</p>
+    <p class="log-eyebrow">Fictional examples · Not real decisions</p>
+    <h1>Fictional past decisions</h1>
+    <p class="log-lead">See 300 fictional decisions. Find examples that relate to the six contracts in this demo. Use them to explore different outcomes.</p>
+    <p class="log-warning"><strong>These decisions are made up.</strong> The names, companies and dates are fictional. The links show related topics. They do not prove that a decision happened. Do not use these examples as approval.</p>
     <div class="log-stats" id="log-stats" aria-live="polite">Loading fictional history…</div>
     <section class="log-controls" aria-label="Filter fictional decision log">
-      <label>Related current review
+      <label>Related review
         <select id="case-filter"><option value="all">All six reviews</option>
           <option value="T01">T01 · Birchbridge · Routine</option>
           <option value="T02">T02 · Brookside · Term</option>
@@ -36,22 +37,22 @@
           <option value="T06">T06 · Orchard · Wording</option>
         </select>
       </label>
-      <label>Previous outcome
+      <label>Past result
         <select id="flag-filter">
-          <option value="all">All earlier outcomes</option>
-          <option value="red">Earlier red flags</option>
-          <option value="green">Earlier acceptable or resolved</option>
-          <option value="amber">Context dependent</option>
+          <option value="all">All results</option>
+          <option value="red">Problems flagged</option>
+          <option value="green">Accepted or fixed</option>
+          <option value="amber">Depends on context</option>
         </select>
       </label>
-      <label>Search this history
+      <label>Search decisions
         <input id="log-search" type="search" placeholder="Licence, appendix, amendment…">
       </label>
     </section>
-    <div class="log-result-header"><h2 id="results-title">Decision history</h2><span id="result-count"></span></div>
+    <div class="log-result-header"><h2 id="results-title">Past decisions</h2><span id="result-count"></span></div>
     <div id="log-list" class="log-list" aria-live="polite"></div>
     <button id="load-more" type="button" class="secondary load-more" hidden>Show more decisions</button>
-    <p class="log-foot">This stand-alone fictional log is intentionally separate from the actual append-only reviewer ledger and governed publication process. A case being similar, common or previously accepted never changes the current review route or grants approval.</p>
+    <p class="log-foot">This page does not show the local reviewer log. A similar past example cannot approve a new contract.</p>
   </main>
 </body>
 </html>
