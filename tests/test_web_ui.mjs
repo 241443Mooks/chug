@@ -151,7 +151,7 @@ test('real API errors are not silently hidden behind the public snapshot',async(
     if(url==='/api/queue')return {ok:false,status:500,headers:{get:()=> 'application/json'},json:async()=>{throw new SyntaxError('Unexpected end of JSON input')}};
     throw new Error('Unexpected public snapshot fallback: '+url);
   };
-  await assert.rejects(h.run("api('/api/queue')"),/Invalid or empty JSON response/);
+  await assert.rejects(h.run("api('/api/queue')"),/Chug could not read the data for this page/);
   assert.equal(h.run('state.staticDemo'),false);
 });
 
