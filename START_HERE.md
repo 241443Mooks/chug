@@ -53,11 +53,12 @@ The online demonstration does not save new decisions or accept document uploads.
 
 The interactive demonstration provides the fuller experience, including recording decisions and exploring how knowledge from one review can become useful in another.
 
-You'll need Python 3.9 or newer. No additional packages, account or AI subscription are required.
+You'll need Python 3.9 or newer. Install the pinned local PDF parser once; no account or AI subscription is required.
 
 From the downloaded project's main folder, run:
 
 ```sh
+python3 -m pip install -r requirements.txt
 python3 -m chug.server --port 8771
 ```
 
@@ -65,9 +66,18 @@ Open the following address in your browser:
 
 `http://127.0.0.1:8771`
 
-You can now explore the same fictional contracts, upload supported synthetic DOCX documents, record decisions and experiment with sharing and withdrawing previous decisions.
+You can now explore the same fictional contracts, upload supported synthetic DOCX or text-based PDF documents, record decisions and experiment with sharing and withdrawing previous decisions. PDF files are kept byte-for-byte; extracted evidence points to page and line anchors. Image-only, encrypted, malformed or layout-ambiguous PDFs are kept for inspection when intake permits, but are blocked from matching and analysis. The application does not verify electronic signatures.
 
 For the new upload → matching → analysis → review queue flow, see [the Issue #8 walkthrough](docs/ISSUE_8_WALKTHROUGH.md).
+
+### Try a fictional PDF
+
+1. Open **References** and add a synthetic NDA PDF to the fictional Legal library. A supported text PDF can be used as an Active matching candidate; a person still confirms applicability before the review decision.
+2. Choose **Check reference applicability** and upload a fictional incoming PDF. Inspect the proposed family and source excerpts; page anchors start with `pdf:p`.
+3. Upload the same PDF through **Add DOCX or PDF** to create an incoming review. Open the queue item to inspect coverage, comparison evidence and the exact original download.
+4. The public website remains read-only and does not accept uploads.
+
+The parser limits uploads to 2 MB and 100 pages and blocks detected images, annotations, forms, optional-content layers, active content, table-like ambiguity and unreadable text. See [the PDF extraction decision](docs/decisions/003-pdf-text-extraction.md) for the remaining limits.
 
 Your local demonstration data is stored on your computer. The application does not send contracts to an AI provider unless you deliberately configure and invoke the optional AI feature.
 

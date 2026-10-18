@@ -1,0 +1,2 @@
+# Pure-Python PDF text extraction. Keep the tested API and license stable.
+pypdf==6.21.1
