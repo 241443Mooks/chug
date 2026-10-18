@@ -424,6 +424,24 @@ test('new intake detail shows a provisional comparison with source anchors and t
   assert.doesNotMatch(h.run('intakeView(state.intake)'),/Reference source not_linked/);
 });
 
+
+test('contract review shows pending flag and unresolved acceptance safeguards in private workflow',()=>{
+  const h=harness(items);
+  h.run('state.detail = '+JSON.stringify(JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'))));
+  const html=h.run('decisionView(state.detail)');
+  assert.match(html,/Flag for further review/);
+  assert.match(html,/unresolved_findings_acknowledged/);
+  assert.match(html,/Other contract decisions/);
+  assert.match(html,/Request amendment/);
+  assert.match(html,/Reject contract/);
+  assert.match(html,/Escalate contract/);
+  assert.match(html,/unassessed or unresolved findings/);
+  h.run('state.staticDemo=true');
+  const publicHTML=h.run('decisionView(state.detail)');
+  assert.match(publicHTML,/Example contract outcomes/);
+  assert.doesNotMatch(publicHTML,/<form/);
+});
+
 test('public reference page keeps its standard upload control hidden',()=>{
   const h=harness(items,'chug.smooks.co.uk');
   const uploadControl={hidden:false};
