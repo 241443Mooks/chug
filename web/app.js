@@ -1,4 +1,4 @@
-const state={queue:[],id:null,detail:null,tab:'overview',page:'home',filter:'all',historyOpen:false,historyFilter:'all',historySource:null,historySourceId:null,reference:null,referenceCandidate:null,staticDemo:false,research:null};
+const state={queue:[],id:null,detail:null,tab:'overview',page:'home',filter:'all',historyOpen:false,historyFilter:'all',historySource:null,historySourceId:null,reference:null,referenceCandidate:null,staticDemo:Boolean(location.hostname)&&!['localhost','127.0.0.1','[::1]'].includes(location.hostname),research:null};
 const el=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label={escalate:'Needs closer review',review_required:'Needs judgement',routine_candidate:'Looks routine',blocked_extraction:'Analysis blocked'};
