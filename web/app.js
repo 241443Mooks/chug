@@ -12,17 +12,17 @@ function toast(message){el('toast').textContent=message;clearTimeout(window.toas
 async function readJson(url,options){
   const response=await fetch(url,options);
   const type=(response.headers?.get('content-type')||'application/json').toLowerCase();
-  if(!type.includes('json')){const error=new Error('Expected JSON but received '+type+' from '+url);error.nonJson=true;throw error}
+  if(!type.includes('json')){const error=new Error('Chug could not read the response for this page.);error.nonJson=true;throw error}
   let data;
   try{data=await response.json()}
   catch(cause){
-    const error=new Error('Invalid or empty JSON response from '+url);
+    const error=new Error('Chug could not read the data for this page.);
     // Static hosting may return an empty 200 response for a missing Python API.
     // Only fall back to bundled data for an otherwise successful API response.
     error.nonJson=response.ok;
     throw error;
   }
-  if(!response.ok)throw new Error(data?.error||'Request failed ('+response.status+')');
+  if(!response.ok)throw new Error(data?.error||'Chug could not load the data (error '+response.status+')');
   return data;
 }
 function staticJsonUrl(url){
@@ -33,7 +33,7 @@ function staticJsonUrl(url){
   match=url.match(/^\/api\/history\/([A-Za-z0-9_-]+)$/);
   if(match)return '/demo-data/history/'+match[1]+'.json';
   if(url.startsWith('/demo-data/'))return url;
-  throw new Error('This is a read-only demonstration; the Python review service is not connected.');
+  throw new Error('This feature is not available in the public demo.');
 }
 function originalUrl(url){
   if(!state.staticDemo)return url;
@@ -47,7 +47,7 @@ function originalUrl(url){
 }
 async function api(url,options){
   if(state.staticDemo){
-    if((options?.method||'GET').toUpperCase()!=='GET')throw new Error('Read-only public demo: reviews, uploads and publications require the private Python service.');
+    if((options?.method||'GET').toUpperCase()!=='GET')throw new Error('Read-only public demo: you cannot upload files or save changes here.');
     return readJson(staticJsonUrl(url));
   }
   try{return await readJson(url,options)}
@@ -57,7 +57,7 @@ async function api(url,options){
         const snapshot=await readJson('/demo-data/queue.json');
         state.staticDemo=true;
         return snapshot;
-      }catch(snapshotError){throw new Error('The host has no JSON API and no exported demo data. Build web/demo-data with python3 scripts/export_public_demo.py before publishing.')}
+      }catch(snapshotError){throw new Error('Chug could not load the public demo data. Please try again later.')}
     }
     throw error;
   }
@@ -75,7 +75,7 @@ function applyStaticDemo(){
 async function loadQueue(){const data=await api('/api/queue');state.queue=data.items;renderQueue();if(state.page==='home'||state.page==='queue')renderPage()}
 function renderQueue(){const shown=queueItems();el('filter').value=state.filter;el('queue-count').textContent=state.filter==='all'?`${state.queue.length} ${state.queue.length===1?'contract':'contracts'} · priority first`:`${shown.length} awaiting a decision`;el('queue').innerHTML=shown.map(item=>`<button class="queue-item ${item.id===state.id?'selected':''}" data-id="${esc(item.id)}" type="button"><span class="queue-item-top"><span class="queue-item-title">${esc(item.display_name)}</span><span class="route-label ${item.route}">${label[item.route]}</span></span><span class="queue-item-sub">${item.findings_count} ${item.findings_count===1?'finding':'findings'}${item.latest_decision?' · Decision recorded':''}</span><span class="queue-reason">${esc(item.reason)}</span></button>`).join('')||'<p class="empty">No contracts awaiting a decision in this view. Choose All contracts to see completed reviews.</p>';el('queue').querySelectorAll('[data-id]').forEach(button=>button.onclick=()=>select(button.dataset.id));applyStaticDemo()}
 function route(){const parts=location.hash.slice(1).replace(/^\/+/, '').split('/');return {page:['home','queue','reference','help','explore','review'].includes(parts[0])?parts[0]:'home',id:parts[1]?decodeURIComponent(parts[1]):null,tab:parts[2]||'overview',anchor:parts[3]?decodeURIComponent(parts[3]):null}}
-async function navigate(page,id=null,tab='overview',anchor=null,replace=false){if(page==='queue'){state.filter=validFilters.has(id)?id:'all';if(!state.staticDemo)sessionStorage.setItem('chug.queueFilter',state.filter)}const hash=page==='review'&&id?'#review/'+[id,tab,...(anchor?[anchor]:[])].map(encodeURIComponent).join('/'):page==='queue'&&state.filter!=='all'?'#queue/'+state.filter:'#'+page;if(location.hash!==hash)window.history[replace?'replaceState':'pushState'](null,'',hash);if(page==='review'&&id!==state.id){state.findingOpen=null;state.historyFilter='all'}state.page=page;state.historyOpen=false;state.historySource=null;if(page==='home'||page==='queue'){try{const data=await api('/api/queue');state.queue=data.items;renderQueue()}catch(err){el('workspace').innerHTML=`<p class="empty">${esc(err.message)}</p>`;return}}if(page==='review'&&id){state.id=id;state.tab=tab;renderQueue();el('workspace').innerHTML='<div class="loading">Opening document…</div>';try{state.detail=await api(`/api/contracts/${encodeURIComponent(id)}`)}catch(err){el('workspace').innerHTML=`<p class="empty">${esc(err.message)}</p>`;return}}renderPage(anchor)}
+async function navigate(page,id=null,tab='overview',anchor=null,replace=false){if(page==='queue'){state.filter=validFilters.has(id)?id:'all';if(!state.staticDemo)sessionStorage.setItem('chug.queueFilter',state.filter)}const hash=page==='review'&&id?'#review/'+[id,tab,...(anchor?[anchor]:[])].map(encodeURIComponent).join('/'):page==='queue'&&state.filter!=='all'?'#queue/'+state.filter:'#'+page;if(location.hash!==hash)window.history[replace?'replaceState':'pushState'](null,'',hash);if(page==='review'&&id!==state.id){state.findingOpen=null;state.historyFilter='all'}state.page=page;state.historyOpen=false;state.historySource=null;if(page==='home'||page==='queue'){try{const data=await api('/api/queue');state.queue=data.items;renderQueue()}catch(err){el('workspace').innerHTML=`<p class="empty">${esc(err.message)}</p>`;return}}if(page==='review'&&id){state.id=id;state.tab=tab;renderQueue();el('workspace').innerHTML='<div class="loading">Opening review…</div>';try{state.detail=await api(`/api/contracts/${encodeURIComponent(id)}`)}catch(err){el('workspace').innerHTML=`<p class="empty">${esc(err.message)}</p>`;return}}renderPage(anchor)}
 async function select(id){await navigate('review',id)}
 function setTab(tab,anchor){return navigate('review',state.id,tab,anchor)}
 function sourceBox(unit,title,kind='source'){return `<div class="evidence-box"><h4>${esc(title)}</h4>${unit?`<blockquote>${esc(unit.text)}</blockquote><a href="#${esc(unit.anchor)}" class="anchor-link" data-anchor="${esc(unit.anchor)}" data-kind="${kind}">View in full text →</a>`:kind==='reference'?'<p>Independent whole-document indicator; compare the linked provisions below.</p>':'<p>Provision absent from incoming document.</p>'}</div>`}
