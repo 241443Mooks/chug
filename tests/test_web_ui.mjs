@@ -146,6 +146,14 @@ test('Add DOCX is a keyboard-operable native button wired to the existing picker
   assert.deepEqual(h.clicks,['upload']);
 });
 
+test('local queue gives local review guidance while public queue states its read-only limit',()=>{
+  const local=harness(items,'127.0.0.1');
+  assert.match(local.run('queueView()'),/You can record a human decision in this local workspace/);
+  assert.doesNotMatch(local.run('queueView()'),/This public demo cannot save decisions/);
+  const publicDemo=harness(items,'chug.smooks.co.uk');
+  assert.match(publicDemo.run('queueView()'),/This public demo cannot save decisions/);
+});
+
 test('queue title and route badge can wrap without collapsing the title column',()=>{
   assert.match(css,/\.queue-item-top\{[^}]*flex-wrap:\s*wrap/);
   assert.match(css,/\.queue-item-title\{[^}]*min-width:\s*11ch[^}]*flex:\s*1\s+1\s+11ch/);
