@@ -582,12 +582,12 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--state-dir", type=Path, default=Path(".chugchug-data"))
+    parser.add_argument("--state-dir", type=Path, default=Path(".chug-data"))
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     Handler.app = App(root, args.state_dir.resolve())
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("ChugChug synthetic review: http://127.0.0.1:%d" % args.port, flush=True)
+    print("Chug synthetic review: http://127.0.0.1:%d" % args.port, flush=True)
     server.serve_forever()
 
 
