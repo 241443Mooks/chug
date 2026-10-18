@@ -273,6 +273,28 @@ class App:
         document = extract(data, filename)
         return self.intake_extracted(data, document, selected_reference_id, reviewer, rationale)
 
+    def intake_batch(self, files):
+        """Run each supplied source through the same automatic intake pipeline."""
+        files = list(files)
+        if not 1 <= len(files) <= 20:
+            raise ValueError("Choose 1 to 20 DOCX files per batch")
+        results = []
+        counts = {"analysed": 0, "awaiting_reference": 0, "blocked_extraction": 0, "duplicate": 0, "failed": 0}
+        for filename, data in files:
+            digest = hashlib.sha256(data).hexdigest() if isinstance(data, bytes) else None
+            duplicate = digest in self.intakes
+            try:
+                detail = self.intake(data, filename)
+                outcome = "duplicate" if duplicate else ("analysed" if detail["comparison"]["status"] in {"analysed", "complete"} else detail["status"])
+                if outcome not in counts:
+                    outcome = "awaiting_reference"
+                results.append({"filename": filename, "sha256": digest, "id": detail["id"], "outcome": outcome, "family": detail["family"], "reference_id": detail["reference"]["reference_id"], "comparison_status": detail["comparison"]["status"], "reason": detail["reason"]})
+            except ValueError as exc:
+                outcome = "failed"
+                results.append({"filename": filename, "sha256": digest, "outcome": outcome, "reason": str(exc)})
+            counts[outcome] += 1
+        return {"submitted": len(files), "counts": counts, "items": results}
+
     def intake_extracted(self, data, document, selected_reference_id=None, reviewer=None, rationale=None):
         document = self._validate_extracted_document(data, document, document.get("filename") if isinstance(document, dict) else None)
         digest = document["sha256"]
@@ -958,6 +980,17 @@ class Handler(BaseHTTPRequestHandler):
             return files[0].get_payload(decode=True), filename, fields
         return files[0].get_payload(decode=True), filename
 
+    def _multipart_batch(self):
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data;"):
+            raise ValueError("Choose a DOCX batch")
+        data = self._body(42_000_000)
+        message = BytesParser(policy=policy.default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode() + b"\r\n\r\n" + data)
+        parts = list(message.iter_parts()) if message.is_multipart() else []
+        if not 1 <= len(parts) <= 20 or any(part.get_param("name", header="content-disposition") != "file" for part in parts):
+            raise ValueError("Choose 1 to 20 DOCX files per batch")
+        return [(part.get_filename() or "uploaded.docx", part.get_payload(decode=True)) for part in parts]
+
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
         if path == "/api/queue":
@@ -1128,6 +1161,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/intakes":
                 data, filename, fields = self._multipart_docx(with_fields=True)
                 return self._json(self.app.intake(data, filename, fields.get("reference_id"), fields.get("reviewer"), fields.get("rationale")), 201)
+            if path == "/api/intakes/batch":
+                return self._json(self.app.intake_batch(self._multipart_batch()), 201)
             if path == "/api/reference-matches":
                 data, filename = self._multipart_docx()
                 return self._json(self.app.match_reference(data, filename), 201)

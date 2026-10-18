@@ -111,6 +111,70 @@ class IncomingIntakeTests(unittest.TestCase):
             server.server_close()
             worker.join()
 
+    def test_batch_runs_each_source_automatically_and_is_idempotent(self):
+        base = ROOT / "research/reference-library-v0.1"
+        nda_ref = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        order_ref = base / "references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"
+        for source in (nda_ref, order_ref):
+            self.app.upload_reference(source.read_bytes(), source.name)
+        files = [(path.name, path.read_bytes()) for path in (
+            base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx",
+            base / "incoming-tests/Incoming - Desktop Reseller Seat Increase.docx",
+            base / "incoming-tests/Incoming - Ambiguous Reseller Cloud Scan Purchase.docx",
+        )]
+        files.append(("not-a-contract.txt", b"unsupported"))
+        batch = self.app.intake_batch(files)
+        self.assertEqual(batch["counts"], {"analysed": 2, "awaiting_reference": 1, "blocked_extraction": 0, "duplicate": 0, "failed": 1})
+        self.assertEqual([row["comparison_status"] for row in batch["items"][:3]], ["analysed", "complete", "not_run"])
+        self.assertEqual(len(self.app.intakes), 3)
+        repeated = App(ROOT, self.state).intake_batch(files)
+        self.assertEqual(repeated["counts"]["duplicate"], 3)
+        self.assertEqual(repeated["counts"]["failed"], 1)
+        self.assertEqual([row.get("id") for row in repeated["items"][:3]], [row["id"] for row in batch["items"][:3]])
+        with self.assertRaisesRegex(ValueError, "1 to 20"):
+            self.app.intake_batch(files * 6)
+
+    def test_http_batch_accepts_multiple_files_and_reports_per_file_state(self):
+        base = ROOT / "research/reference-library-v0.1"
+        source = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        changed = base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx"
+        self.app.upload_reference(source.read_bytes(), source.name)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Handler.app = self.app
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            boundary = "batch-intake"
+            body = b""
+            for filename, data in [("exact.docx", source.read_bytes()), (changed.name, changed.read_bytes()), ("unsupported.txt", b"text")]:
+                body += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode() + data + b"\r\n"
+            body += f"--{boundary}--\r\n".encode()
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/intakes/batch", data=body, method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            batch = json.loads(urlopen(request).read())
+            self.assertEqual(batch["counts"]["analysed"], 2)
+            self.assertEqual(batch["counts"]["failed"], 1)
+            self.assertEqual(batch["items"][0]["comparison_status"], "analysed")
+            self.assertEqual(batch["items"][2]["outcome"], "failed")
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
+    def test_directory_feed_pass_uses_batch_pipeline_and_deduplicates(self):
+        from scripts.ingest_directory import ingest
+
+        base = ROOT / "research/reference-library-v0.1"
+        source = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        changed = base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx"
+        self.app.upload_reference(source.read_bytes(), source.name)
+        drop = self.state / "drop"
+        drop.mkdir()
+        (drop / "exact.docx").write_bytes(source.read_bytes())
+        (drop / "changed.docx").write_bytes(changed.read_bytes())
+        first = ingest(self.state, drop)
+        self.assertEqual(first["counts"]["analysed"], 2)
+        self.assertEqual(ingest(self.state, drop)["counts"]["duplicate"], 2)
+
     def test_new_nda_runs_provisional_comparison_and_persists_identity_and_queue(self):
         standard = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
         self.app.upload_reference(standard, "fictional-nda-standard.docx")

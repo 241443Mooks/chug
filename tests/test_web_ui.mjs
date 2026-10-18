@@ -139,8 +139,8 @@ test('T05 findings 2 and 4 survive the finding → comparison → finding round 
 
 test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
   const h=harness(items);
-  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Upload and compare DOCX<\/button>/);
-  assert.match(html,/<input id="upload" type="file" accept="\.docx" hidden>/);
+  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Upload DOCX contracts<\/button>/);
+  assert.match(html,/<input id="upload" type="file" accept="\.docx" multiple hidden>/);
   assert.equal(typeof h.node('upload-trigger').onclick,'function');
   h.node('upload-trigger').onclick();
   assert.deepEqual(h.clicks,['upload']);
@@ -152,6 +152,18 @@ test('local queue gives local review guidance while public queue states its read
   assert.doesNotMatch(local.run('queueView()'),/This public demo cannot save decisions/);
   const publicDemo=harness(items,'chug.smooks.co.uk');
   assert.match(publicDemo.run('queueView()'),/This public demo cannot save decisions/);
+});
+
+test('private batch summary shows each outcome and a route to its review',()=>{
+  const h=harness(items,'127.0.0.1');
+  h.run("state.batchResult={submitted:2,counts:{analysed:1,awaiting_reference:0,blocked_extraction:0,duplicate:0,failed:1},items:[{filename:'matched.docx',outcome:'analysed',reason:'Compared',sha256:'abc',id:'I-abc'},{filename:'invalid.txt',outcome:'failed',reason:'DOCX only'}]}");
+  const page=h.run('queueView()');
+  assert.match(page,/Batch intake · 2 files/);
+  assert.match(page,/data-batch-intake="abc"/);
+  assert.match(page,/invalid\.txt.*DOCX only/);
+  const publicDemo=harness(items,'chug.smooks.co.uk');
+  publicDemo.run("state.batchResult={submitted:1,counts:{analysed:1},items:[]}");
+  assert.doesNotMatch(publicDemo.run('queueView()'),/Batch intake/);
 });
 
 test('queue title and route badge can wrap without collapsing the title column',()=>{
