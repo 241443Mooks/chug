@@ -38,7 +38,8 @@ class ReferenceSelectionTests(unittest.TestCase):
             matching = app.detail(matching_id)
             self.assertEqual(matching["analysis"]["findings"], [])
             self.assertEqual(matching["analysis"]["route"], "review_required")
-            self.assertIn("not been approved", " ".join(matching["analysis"]["assurance"]["limitations"]))
+            self.assertIn("used for the comparison", " ".join(matching["analysis"]["assurance"]["limitations"]))
+            self.assertEqual(matching["analysis"]["route"], "review_required")
             event = app.ledger.append(custom_detail["document"]["sha256"], custom_detail["document"]["filename"], "Fictional reviewer", "request_amendment", "Review the two changed clauses.", [], reference_sha256=chosen_sha)
             self.assertEqual(event["reference_sha256"], chosen_sha)
 

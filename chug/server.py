@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,7 +19,7 @@ from .document import extract
 from .nda_pack import NDAPack
 from .ledger import KnowledgeLedger, Ledger
 from .corrections import CorrectionLedger
-from .reference_registry import load_registry, uploaded_reference_metadata
+from .reference_registry import load_registry, propose_reference, uploaded_reference_metadata
 
 
 class App:
@@ -33,6 +34,7 @@ class App:
         self.reference_library = {}
         self._load_reference_catalogue(bundled_path)
         self._load_references()
+        self._load_match_intakes()
         self.active_reference_sha256 = self._load_selection()
         self.contracts = {}
         for document_id, document in incoming.items():
@@ -101,16 +103,38 @@ class App:
                 raise ValueError("Reference recovery required: family metadata does not match source")
             if meta.get("reference_id", generated["reference_id"]) != generated["reference_id"]:
                 raise ValueError("Reference recovery required: reference ID does not match source")
-            if meta.get("status", generated["status"]) != "registered_for_evaluation" or meta.get("approval_status", "unapproved") != "unapproved":
-                raise ValueError("Reference recovery required: uploaded references must remain unapproved evaluation candidates")
+            status = meta.get("status", generated["status"])
+            legacy_status = status == "registered_for_evaluation" and meta.get("approval_status", "unapproved") == "unapproved"
+            if legacy_status:
+                status = "active"  # PR #11 records pre-governance uploads; the controlled upload is the authorization boundary.
+            if status not in {"active", "superseded", "withdrawn"}:
+                raise ValueError("Reference recovery required: uploaded reference status is invalid")
             if meta.get("provenance", "locally_uploaded_synthetic_reference") != "locally_uploaded_synthetic_reference":
                 raise ValueError("Reference recovery required: uploaded reference provenance is invalid")
             if generated["family"] == "nda":
                 self._validate_reference(document)
                 self.references[digest] = {"document": document, "path": originals[stem], "kind": "uploaded_synthetic", "family": "nda"}
             metadata = {**generated, **{key: meta[key] for key in generated if key in meta}}
+            metadata["status"] = status
+            metadata.pop("approval_status", None)
+            if isinstance(meta.get("status_history"), list):
+                metadata["status_history"] = meta["status_history"]
             metadata["original_filename"] = meta.get("original_filename", meta["filename"])
             metadata["provenance"] = meta.get("provenance", "locally_uploaded_synthetic_reference")
+            if legacy_status:
+                history = list(meta.get("status_history", []))
+                history.append({"from": "registered_for_evaluation", "to": "active", "reason": "Migrated pre-governance PR #11 upload through the fictional controlled Legal upload flow", "timestamp": datetime.now(timezone.utc).isoformat()})
+                meta["status"] = "active"
+                meta.pop("approval_status", None)
+                meta["status_history"] = history
+                meta["record_sha256"] = hashlib.sha256(json.dumps(meta, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+                migration = meta_path.with_suffix(".recording")
+                with migration.open("x") as handle:
+                    json.dump(meta, handle, ensure_ascii=False)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(migration, meta_path)
+                metadata["status_history"] = history
             self.reference_library[metadata["reference_id"]] = {"metadata": metadata, "document": document, "path": originals[stem], "kind": "uploaded_synthetic"}
 
     def _load_reference_catalogue(self, bundled_path):
@@ -121,7 +145,7 @@ class App:
             "direction": None, "purpose": None, "jurisdiction": None,
             "applicability": {name: {"state": "unknown", "value": None, "evidence": []} for name in ("family", "direction", "purpose", "deployment", "channel", "jurisdiction", "variant")},
             "original_filename": self.reference["filename"], "sha256": self.bundled_reference_sha256,
-            "version": "bundled", "status": "approved_reference", "approval_status": "approved",
+            "version": "bundled", "status": "legacy_nda_baseline",
             "provenance": "bundled_demo_baseline", "extraction": {"status": self.reference["coverage"]["status"], "limitations": list(self.reference["coverage"].get("issues", [])), "passage_count": len(self.reference["units"]), "parts": list(self.reference["coverage"].get("parts", []))},
         }
         base["applicability"]["family"] = {"state": "known", "value": "nda", "evidence": []}
@@ -156,7 +180,137 @@ class App:
         digest = selection.get("sha256") if isinstance(selection, dict) else None
         if digest not in self.references:
             raise ValueError("Reference selection points to an unavailable original")
+        library_item = next((item for item in self.reference_library.values() if item["metadata"].get("sha256") == digest), None)
+        if library_item and library_item["metadata"].get("status") in {"superseded", "withdrawn"}:
+            return self.bundled_reference_sha256
         return digest
+
+    def _load_match_intakes(self):
+        self.match_intakes = {}
+        directory = self.state_dir / "reference_matches"
+        if not directory.exists():
+            return
+        if list(directory.glob("*.uploading")) or list(directory.glob("*.recording")):
+            raise ValueError("Reference matching recovery required: interrupted write detected")
+        metadata = {path.stem: path for path in directory.glob("*.json")}
+        originals = {path.stem: path for path in directory.glob("*.docx")}
+        if set(metadata) != set(originals):
+            raise ValueError("Reference matching recovery required: original and proposal records do not match")
+        for digest, meta_path in metadata.items():
+            try:
+                record = json.loads(meta_path.read_text())
+                data = originals[digest].read_bytes()
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("Reference matching recovery required: record is unreadable for " + digest) from exc
+            record_hash = record.pop("record_sha256", None)
+            actual_record_hash = hashlib.sha256(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if digest != record.get("sha256") or hashlib.sha256(data).hexdigest() != digest or record_hash != actual_record_hash:
+                raise ValueError("Reference matching recovery required: source or proposal integrity mismatch for " + digest)
+            document = extract(data, record.get("filename", ""))
+            self.match_intakes[digest] = {"document": document, "path": originals[digest], "record": record}
+
+    def _matching_references(self):
+        references = []
+        unavailable = []
+        for item in self.reference_library.values():
+            metadata = item["metadata"]
+            if metadata.get("status") in {"superseded", "withdrawn"}:
+                references.append({**metadata, "document": item["document"]})
+                continue
+            if self._library_source_integrity(item) != "verified":
+                unavailable.append({"reference_id": metadata["reference_id"], "display_name": metadata["display_name"], "status": metadata.get("status"), "reasons": ["source integrity is not verified"]})
+                continue
+            references.append({**metadata, "document": item["document"]})
+        return references, unavailable
+
+    def match_reference(self, data, filename):
+        if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
+            raise ValueError("Choose one synthetic DOCX under 2 MB")
+        document = extract(data, filename)
+        digest = document["sha256"]
+        existing = self.match_intakes.get(digest)
+        if existing:
+            if hashlib.sha256(existing["path"].read_bytes()).hexdigest() != digest:
+                raise ValueError("Stored incoming original is unavailable or changed")
+            return existing["record"]
+        references, unavailable = self._matching_references()
+        proposal = propose_reference(document, references, eligible_statuses={"active"})
+        proposal["excluded"].extend(unavailable)
+        record = {
+            "incoming": {"filename": document["filename"], "sha256": digest},
+            "assessed_at": datetime.now(timezone.utc).isoformat(),
+            "proposal": proposal,
+            "binding": None,
+            "human_decision": {"status": "pending", "required": True},
+            "comparison": {"status": "not_run"},
+        }
+        directory = self.state_dir / "reference_matches"
+        directory.mkdir(parents=True, exist_ok=True)
+        original = directory / (digest + ".docx")
+        meta_path = directory / (digest + ".json")
+        temporary = directory / (digest + ".uploading")
+        with temporary.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, original)
+        temporary = directory / (digest + ".recording")
+        with temporary.open("x") as handle:
+            stored = {**record, "sha256": digest, "record_sha256": hashlib.sha256(json.dumps({**record, "sha256": digest}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+            json.dump(stored, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, meta_path)
+        self.match_intakes[digest] = {"document": document, "path": original, "record": record}
+        return record
+
+    def reference_match_detail(self, digest):
+        item = self.match_intakes.get(digest)
+        if not item:
+            raise KeyError("Reference match not found")
+        try:
+            intact = hashlib.sha256(item["path"].read_bytes()).hexdigest() == digest
+        except OSError:
+            intact = False
+        if not intact:
+            raise ValueError("Incoming original is unavailable or changed; proposal is withheld")
+        return {**item["record"], "original_url": "/api/reference-matches/" + digest + "/original"}
+
+    def update_reference_status(self, reference_id, status, reason):
+        if status not in {"superseded", "withdrawn"}:
+            raise ValueError("Reference status must be Superseded or Withdrawn")
+        item = self.reference_library.get(reference_id)
+        if not item or item["kind"] != "uploaded_synthetic":
+            raise ValueError("Only locally uploaded synthetic standards can change status")
+        if self._library_source_integrity(item) != "verified":
+            raise ValueError("Reference original is unavailable or changed")
+        if not isinstance(reason, str) or not reason.strip() or len(reason.strip()) > 1000:
+            raise ValueError("Provide a reason of 1 to 1000 characters")
+        meta_path = item["path"].with_suffix(".json")
+        stored = json.loads(meta_path.read_text())
+        record_hash = stored.pop("record_sha256", None)
+        expected = hashlib.sha256(json.dumps(stored, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if record_hash != expected:
+            raise ValueError("Reference metadata integrity mismatch; status change is blocked")
+        current = item["metadata"].get("status")
+        if current != "active":
+            raise ValueError("Only Active standards can be superseded or withdrawn")
+        history = list(item["metadata"].get("status_history", []))
+        history.append({"from": current, "to": status, "reason": reason.strip(), "timestamp": datetime.now(timezone.utc).isoformat()})
+        stored["status"] = status
+        stored.pop("approval_status", None)
+        stored["status_history"] = history
+        stored["record_sha256"] = hashlib.sha256(json.dumps(stored, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        temporary = meta_path.with_suffix(".recording")
+        with temporary.open("x") as handle:
+            json.dump(stored, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, meta_path)
+        item["metadata"].update({"status": status, "status_history": history})
+        if item["metadata"].get("sha256") == self.active_reference_sha256:
+            self.select_reference(self.bundled_reference_sha256)
+        return {**item["metadata"], "kind": item["kind"], "source_integrity": "verified"}
 
     def _validate_reference(self, document):
         self.pack.validate_reference(document, self.reference)
@@ -184,7 +338,13 @@ class App:
             intact = hashlib.sha256(current["path"].read_bytes()).hexdigest() == self.active_reference_sha256
         except OSError:
             intact = False
-        return {"current": {**current["document"], "kind": current["kind"], "source_integrity": "verified" if intact else "mismatch"}, "available": [{"sha256": sha, "filename": item["document"]["filename"], "kind": item["kind"], "family": item.get("family", "nda")} for sha, item in self.references.items()]}
+        available = []
+        for sha, item in self.references.items():
+            library_item = next((row for row in self.reference_library.values() if row["metadata"].get("sha256") == sha), None)
+            if library_item and library_item["metadata"].get("status") in {"superseded", "withdrawn"}:
+                continue
+            available.append({"sha256": sha, "filename": item["document"]["filename"], "kind": item["kind"], "family": item.get("family", "nda")})
+        return {"current": {**current["document"], "kind": current["kind"], "source_integrity": "verified" if intact else "mismatch"}, "available": available}
 
     def _library_source_integrity(self, item):
         try:
@@ -210,6 +370,9 @@ class App:
     def select_reference(self, digest):
         if digest not in self.references or self.references[digest].get("family", "nda") != "nda":
             raise ValueError("Reference not found")
+        library_item = next((item for item in self.reference_library.values() if item["metadata"].get("sha256") == digest), None)
+        if library_item and library_item["metadata"].get("status") in {"superseded", "withdrawn"}:
+            raise ValueError("Superseded or Withdrawn references cannot be selected for new NDA uploads")
         try:
             intact = hashlib.sha256(self.references[digest]["path"].read_bytes()).hexdigest() == digest
         except OSError:
@@ -540,6 +703,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.app.reference_library_list())
             except ValueError as exc:
                 return self._error(409, str(exc))
+        match_detail = re.fullmatch(r"/api/reference-matches/([0-9a-f]{64})", path)
+        if match_detail:
+            try:
+                return self._json(self.app.reference_match_detail(match_detail.group(1)))
+            except KeyError as exc:
+                return self._error(404, str(exc).strip("'"))
+            except ValueError as exc:
+                return self._error(409, str(exc))
+        match_original = re.fullmatch(r"/api/reference-matches/([0-9a-f]{64})/original", path)
+        if match_original:
+            item = self.app.match_intakes.get(match_original.group(1))
+            if not item:
+                return self._error(404, "Reference match not found")
+            try:
+                data = item["path"].read_bytes()
+            except OSError:
+                return self._error(409, "Incoming original unavailable")
+            if hashlib.sha256(data).hexdigest() != match_original.group(1):
+                return self._error(409, "Incoming original identity changed")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            self.send_header("Content-Disposition", 'attachment; filename="incoming-standard-match.docx"')
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return self.wfile.write(data)
         library_item = re.fullmatch(r"/api/reference-library/([A-Za-z0-9_-]+)", path)
         if library_item:
             try:
@@ -648,6 +837,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/upload":
                 data, filename = self._multipart_docx()
                 return self._json({"id": self.app.upload(data, filename)}, 201)
+            if path == "/api/reference-matches":
+                data, filename = self._multipart_docx()
+                return self._json(self.app.match_reference(data, filename), 201)
             if path == "/api/reference/upload":
                 data, filename = self._multipart_docx()
                 return self._json(self.app.upload_reference(data, filename), 201)
@@ -656,6 +848,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Expected a JSON object")
             if path == "/api/reference/select":
                 return self._json(self.app.select_reference(body.get("sha256")))
+            reference_status = re.fullmatch(r"/api/reference-library/([A-Za-z0-9_-]+)/status", path)
+            if reference_status:
+                return self._json(self.app.update_reference_status(reference_status.group(1), body.get("status"), body.get("reason", "")), 201)
             if path == "/api/corrections":
                 document_id = body.get("document_id")
                 if document_id not in self.app.contracts:

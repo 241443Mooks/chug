@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CUSTOMER_ORDER = ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Desktop User Licences - Direct - v0.1.docx"
 
 
-def new_customer_order_bytes():
+def new_customer_order_bytes(users=13):
     """Create a distinct synthetic upload from the research specimen without touching it."""
     source = CUSTOMER_ORDER.read_bytes()
     output = io.BytesIO()
@@ -27,7 +27,7 @@ def new_customer_order_bytes():
         for entry in original.infolist():
             content = original.read(entry.filename)
             if entry.filename == "word/document.xml":
-                content = content.replace(b"12 named desktop software users", b"13 named desktop software users")
+                content = content.replace(b"12 named desktop software users", f"{users} named desktop software users".encode())
             updated.writestr(entry, content)
     return output.getvalue()
 
@@ -41,7 +41,7 @@ class ReferenceLibraryTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_customer_order_reference_persists_as_unapproved_without_changing_nda(self):
+    def test_customer_order_reference_persists_active_without_changing_nda(self):
         data = new_customer_order_bytes()
         baseline = self.app.active_reference_sha256
         item = self.app.upload_reference(data, CUSTOMER_ORDER.name)["library_item"]
@@ -49,8 +49,8 @@ class ReferenceLibraryTests(unittest.TestCase):
 
         self.assertEqual(item["family"], "customer_order")
         self.assertEqual(item["sha256"], digest)
-        self.assertEqual(item["approval_status"], "unapproved")
-        self.assertEqual(item["status"], "registered_for_evaluation")
+        self.assertEqual(item["status"], "active")
+        self.assertNotIn("approval_status", item)
         self.assertEqual(item["provenance"], "locally_uploaded_synthetic_reference")
         self.assertEqual(item["extraction"]["status"], "complete")
         self.assertEqual(item["applicability"]["jurisdiction"]["state"], "unknown")
@@ -72,7 +72,7 @@ class ReferenceLibraryTests(unittest.TestCase):
         self.assertEqual(duplicate["reference_id"], item["reference_id"])
         self.assertEqual(duplicate["original_filename"], item["original_filename"])
         self.assertEqual(duplicate["version"], item["version"])
-        self.assertEqual(duplicate["approval_status"], "unapproved")
+        self.assertEqual(duplicate["status"], "active")
         self.assertEqual(len(list((self.state / "references").glob("*.docx"))), 1)
 
     def test_supported_nda_upload_retains_existing_selection_behavior_and_family_isolation(self):
@@ -83,13 +83,97 @@ class ReferenceLibraryTests(unittest.TestCase):
         result = self.app.upload_reference(nda_data, "fictional-mutual-nda.docx")
 
         self.assertEqual(result["library_item"]["family"], "nda")
-        self.assertEqual(result["library_item"]["approval_status"], "unapproved")
+        self.assertEqual(result["library_item"]["status"], "active")
         self.assertEqual(result["current"]["sha256"], hashlib.sha256(nda_data).hexdigest())
         self.assertNotEqual(self.app.active_reference_sha256, bundled_sha)
         self.assertEqual(self.app.detail("T03")["reference"]["sha256"], bundled_sha)
         rows = self.app.reference_library_list()["references"]
-        families = {row["family"] for row in rows if row["status"] == "registered_for_evaluation"}
+        families = {row["family"] for row in rows if row["status"] == "active"}
         self.assertEqual(families, {"nda", "customer_order"})
+
+    def test_nda_matching_proposes_active_nda_and_excludes_wrong_family_and_legacy_baseline(self):
+        nda_data = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
+        order_data = new_customer_order_bytes()
+        order = self.app.upload_reference(order_data, "fictional-order.docx")["library_item"]
+        nda = self.app.upload_reference(nda_data, "fictional-nda.docx")["library_item"]
+        incoming = (ROOT / "dataset/incoming/T03-hidden-perpetual-licence.docx").read_bytes()
+
+        result = self.app.match_reference(incoming, "incoming-nda.docx")
+        proposal = result["proposal"]
+        self.assertEqual(proposal["status"], "proposed")
+        self.assertEqual(proposal["proposal"]["reference_id"], nda["reference_id"])
+        self.assertEqual(proposal["proposal"]["status"], "active")
+        self.assertTrue(proposal["human_confirmation_required"])
+        self.assertFalse(proposal["comparison_allowed"])
+        self.assertEqual(result["comparison"]["status"], "not_run")
+
+        excluded = {row["reference_id"]: row for row in proposal["excluded"]}
+        self.assertIn("family", " ".join(excluded[order["reference_id"]]["reasons"]))
+        bundled_id = "BASE-" + self.app.bundled_reference_sha256[:12]
+        self.assertIn(bundled_id, excluded)
+        self.assertIn("legacy NDA comparison baseline", " ".join(excluded[bundled_id]["reasons"]))
+
+    def test_withdrawing_selected_nda_restores_bundled_baseline_for_new_uploads(self):
+        nda_data = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
+        result = self.app.upload_reference(nda_data, "fictional-mutual-nda.docx")
+        item = result["library_item"]
+        self.assertEqual(self.app.active_reference_sha256, item["sha256"])
+        self.app.update_reference_status(item["reference_id"], "withdrawn", "Fictional Legal team withdrawal for test")
+        self.assertEqual(self.app.active_reference_sha256, self.app.bundled_reference_sha256)
+        self.assertEqual(self.app.reference_info()["current"]["sha256"], self.app.bundled_reference_sha256)
+        self.assertNotIn(item["sha256"], {row["sha256"] for row in self.app.reference_info()["available"]})
+        with self.assertRaisesRegex(ValueError, "cannot be selected"):
+            self.app.select_reference(item["sha256"])
+
+    def test_superseded_and_withdrawn_are_durable_and_excluded_from_new_matches(self):
+        data = new_customer_order_bytes()
+        item = self.app.upload_reference(data, CUSTOMER_ORDER.name)["library_item"]
+        changed = self.app.update_reference_status(item["reference_id"], "withdrawn", "Fictional Legal team withdrawal for test")
+        self.assertEqual(changed["status"], "withdrawn")
+        self.assertEqual(changed["status_history"][-1]["from"], "active")
+        proposal = self.app.match_reference(data, "incoming-order.docx")["proposal"]
+        self.assertIn(item["reference_id"], {entry["reference_id"] for entry in proposal["excluded"]})
+        self.assertNotEqual((proposal.get("proposal") or {}).get("reference_id"), item["reference_id"])
+
+        restarted = App(ROOT, self.state)
+        restored = restarted.reference_library_detail(item["reference_id"])
+        self.assertEqual(restored["status"], "withdrawn")
+        self.assertEqual(restored["status_history"], changed["status_history"])
+        self.assertEqual(restored["source_integrity"], "verified")
+        self.assertEqual((self.state / "references" / (item["sha256"] + ".docx")).read_bytes(), data)
+
+    def test_pre_governance_pr11_upload_migrates_to_active_with_auditable_history(self):
+        item = self.app.upload_reference(new_customer_order_bytes(), "fictional-order.docx")["library_item"]
+        meta_path = self.state / "references" / (item["sha256"] + ".json")
+        metadata = json.loads(meta_path.read_text())
+        metadata["status"] = "registered_for_evaluation"
+        metadata["approval_status"] = "unapproved"
+        metadata["record_sha256"] = hashlib.sha256(json.dumps({key: value for key, value in metadata.items() if key != "record_sha256"}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        meta_path.write_text(json.dumps(metadata, ensure_ascii=False))
+
+        migrated = App(ROOT, self.state).reference_library_detail(item["reference_id"])
+        self.assertEqual(migrated["status"], "active")
+        self.assertEqual(migrated["status_history"][-1]["from"], "registered_for_evaluation")
+        persisted = json.loads(meta_path.read_text())
+        self.assertEqual(persisted["status"], "active")
+        self.assertNotIn("approval_status", persisted)
+        self.assertEqual(persisted["record_sha256"], hashlib.sha256(json.dumps({key: value for key, value in persisted.items() if key != "record_sha256"}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+
+    def test_matching_proposal_snapshot_survives_restart_with_source_and_identity(self):
+        standard = self.app.upload_reference(new_customer_order_bytes(13), "fictional-direct-desktop.docx")["library_item"]
+        incoming = new_customer_order_bytes(14)
+        record = self.app.match_reference(incoming, "incoming-direct-desktop.docx")
+        self.assertEqual(record["proposal"]["human_confirmation_required"], True)
+        self.assertFalse(record["proposal"]["comparison_allowed"])
+        self.assertEqual(record["human_decision"]["status"], "pending")
+        self.assertEqual(record["comparison"]["status"], "not_run")
+        self.assertIn(standard["reference_id"], {record["proposal"].get("proposal", {}).get("reference_id"), *[row["reference_id"] for row in record["proposal"].get("alternatives", [])]})
+
+        restarted = App(ROOT, self.state)
+        restored = restarted.reference_match_detail(record["incoming"]["sha256"])
+        self.assertEqual(restored["proposal"], record["proposal"])
+        self.assertEqual(restored["incoming"], record["incoming"])
+        self.assertEqual((self.state / "reference_matches" / (record["incoming"]["sha256"] + ".docx")).read_bytes(), incoming)
 
     def test_corrupt_and_unsupported_nda_references_are_rejected_clearly(self):
         with self.assertRaisesRegex(ValueError, "Reference extraction is incomplete"):
@@ -140,7 +224,7 @@ class ReferenceLibraryApiTests(unittest.TestCase):
                 candidate = next(row for row in listing["references"] if row["reference_id"] == "ORDER-PRO-DIRECT")
                 detail = json.loads(urlopen(base + "/api/reference-library/ORDER-PRO-DIRECT").read())
                 original = urlopen(base + detail["original_url"]).read()
-                self.assertEqual(candidate["approval_status"], "unapproved")
+                self.assertEqual(candidate["status"], "research_candidate")
                 self.assertEqual(detail["family"], "customer_order")
                 self.assertEqual(hashlib.sha256(original).hexdigest(), detail["sha256"])
 
@@ -150,13 +234,49 @@ class ReferenceLibraryApiTests(unittest.TestCase):
                 request = Request(base + "/api/reference/upload", data=multipart, method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
                 uploaded = json.loads(urlopen(request).read())
                 self.assertEqual(uploaded["library_item"]["family"], "customer_order")
-                self.assertEqual(uploaded["library_item"]["approval_status"], "unapproved")
+                self.assertEqual(uploaded["library_item"]["status"], "active")
                 self.assertEqual(uploaded["current"]["sha256"], Handler.app.bundled_reference_sha256)
                 self.assertEqual(hashlib.sha256(urlopen(base + uploaded["library_item"]["original_url"]).read()).hexdigest(), uploaded["library_item"]["sha256"])
                 request = Request(base + "/api/reference-library", data=b"{}", method="POST", headers={"Content-Type": "application/json"})
                 with self.assertRaises(HTTPError) as error:
                     urlopen(request)
                 self.assertEqual(error.exception.code, 404)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+    def test_matching_api_persists_applicability_snapshot_and_status_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            Handler.app = App(ROOT, state)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = "http://127.0.0.1:" + str(server.server_port)
+            boundary = "matching-api-boundary"
+            try:
+                standard_data = new_customer_order_bytes(13)
+                standard_request = Request(base + "/api/reference/upload", data=(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="Direct standard.docx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + standard_data + (f'\r\n--{boundary}--\r\n').encode(), method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+                standard = json.loads(urlopen(standard_request).read())["library_item"]
+                incoming_data = new_customer_order_bytes(14)
+                match_request = Request(base + "/api/reference-matches", data=(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="Incoming order.docx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + incoming_data + (f'\r\n--{boundary}--\r\n').encode(), method="POST", headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+                result = json.loads(urlopen(match_request).read())
+                self.assertEqual(result["incoming"]["sha256"], hashlib.sha256(incoming_data).hexdigest())
+                self.assertTrue(result["proposal"]["human_confirmation_required"])
+                self.assertFalse(result["proposal"]["comparison_allowed"])
+                self.assertEqual(result["comparison"]["status"], "not_run")
+                self.assertEqual(result["human_decision"]["status"], "pending")
+                detailed = json.loads(urlopen(base + "/api/reference-matches/" + result["incoming"]["sha256"]).read())
+                self.assertEqual(detailed["proposal"], result["proposal"])
+                self.assertIn(standard["reference_id"], {detailed["proposal"].get("proposal", {}).get("reference_id"), *[row["reference_id"] for row in detailed["proposal"].get("alternatives", [])]})
+                self.assertEqual(urlopen(base + detailed["original_url"]).read(), incoming_data)
+
+                status_request = Request(base + "/api/reference-library/" + standard["reference_id"] + "/status", data=json.dumps({"status": "superseded", "reason": "New fictional version replaces it"}).encode(), method="POST", headers={"Content-Type": "application/json"})
+                status = json.loads(urlopen(status_request).read())
+                self.assertEqual(status["status"], "superseded")
+                Handler.app = App(ROOT, state)
+                self.assertEqual(Handler.app.reference_library_detail(standard["reference_id"])["status"], "superseded")
             finally:
                 server.shutdown()
                 thread.join(timeout=5)
