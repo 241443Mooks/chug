@@ -1,5 +1,13 @@
 # Swig — Design journal
 
+## Entry 015 — Finding assessment and contract outcome are separate acts
+
+**Observation:** Reviewers needed to judge a reported difference without that judgement silently deciding what happens to the agreement. Repeated “Open finding” links also made it easy to lose the current task.
+
+**Decision:** Give every comparison finding its own assessment history and direct review view, then present Accept contract and Flag for further review as separate whole-agreement actions. Bind assessment events to incoming and reference hashes plus an evidence snapshot. Treat public controls as examples without persistence.
+
+**Evidence and uncertainty:** Local API and UI tests cover finding identity, revisions, restart persistence, source hashes, required reasons, no-finding contract actions and static read-only examples. Full browser, assistive technology, 390 px review, customer-order and newly-intaked review journeys remain to be verified. Reviewer understanding and creative acceptance remain pending.
+
 Record meaningful discoveries, decisions and surprises as the product is built. Separate observations from hypotheses; do not fabricate user research, performance or results.
 
 ## Entry 001 — Starting design conviction

@@ -61,16 +61,16 @@ test('Home counts pending work and each category opens its filtered queue',async
 test('decision controls retain human outcomes, rationale and finding selection',()=>{
   const h=harness(items);
   const html=h.run("decisionView({analysis:{findings:[{id:'finding-1',title:'Broad rights'}]}})");
-  for(const outcome of ['approve','request_amendment','reject','escalate'])assert.match(html,new RegExp(`value="${outcome}"`));
+  for(const outcome of ['accept_contract','flag_for_review'])assert.match(html,new RegExp(`value="${outcome}"`));
   assert.match(html,/name="reviewer" required/);
   assert.match(html,/name="rationale" required/);
-  assert.match(html,/name="finding" value="finding-1"/);
-  assert.match(html,/Recording a decision does not publish it as precedent/);
+  assert.match(html,/independently reviewed the exact incoming original/);
+  assert.match(html,/person decides what happens/);
   h.run('state.staticDemo=true');
   const publicHtml=h.run("decisionView({analysis:{findings:[]}})");
-  assert.match(publicHtml,/Decisions happen in the private review workflow/);
-  assert.match(publicHtml,/cannot record a decision or approve a contract/);
-  assert.doesNotMatch(publicHtml,/are saved in review history/);
+  assert.match(publicHtml,/Example contract outcomes/);
+  assert.match(publicHtml,/cannot accept or flag contracts/);
+  assert.doesNotMatch(publicHtml,/<form/);
 });
 
 test('T05 overview surfaces every finding as a distinct source-linked item',()=>{
@@ -83,7 +83,7 @@ test('T05 overview surfaces every finding as a distinct source-linked item',()=>
   assert.equal((html.match(/class="finding-summary"/g)||[]).length,4);
   for(const finding of detail.analysis.findings){
     assert.ok(html.includes(finding.title),`missing finding title ${finding.title}`);
-    assert.ok(html.includes(`data-anchor="${finding.sources[0].anchor}"`),`missing source link ${finding.id}`);
+    assert.ok(html.includes(`data-review-finding="${finding.id}"`),`missing finding review link ${finding.id}`);
   }
   assert.match(html,/Schedule 1 — Additional Terms/);
   assert.match(html,/Despite clause 3, the receiving party may use/);
@@ -97,6 +97,21 @@ test('T05 overview surfaces every finding as a distinct source-linked item',()=>
   assert.match(h.run('reviewNav(state.detail)'),/Checks run/);
   assert.match(css,/\.next-step\{[^}]*justify-content:space-between/);
   assert.match(css,/\.finding-summary\{[^}]*display:flex/);
+});
+
+test('finding review presents five distinct assessments and direct previous/next actions',()=>{
+  const h=harness(items),detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'));
+  h.run('state.detail='+JSON.stringify(detail)+'; state.id="T05"; state.tab="finding"; state.anchor='+JSON.stringify(detail.analysis.findings[1].id));
+  const view=h.run('findingReviewView(state.detail,state.detail.analysis.findings[1])');
+  for(const label of ['Not relevant','Acceptable','Problem','Needs further review','Deal breaker'])assert.match(view,new RegExp(label));
+  assert.match(view,/Review finding 2 of 4/);
+  assert.match(view,/data-next-finding/);
+  assert.match(view,/data-prev-finding/);
+  assert.match(view,/This does not reject the contract/);
+  h.run('state.staticDemo=true');
+  const publicView=h.run('findingReviewView(state.detail,state.detail.analysis.findings[1])');
+  assert.match(publicView,/Example finding assessments/);
+  assert.doesNotMatch(publicView,/<form/);
 });
 
 test('reference wording distinguishes evidenced additions from unclear matches',()=>{
@@ -339,7 +354,7 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/will not suggest it for new contracts/);
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/How references work/);
   assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
 });
 

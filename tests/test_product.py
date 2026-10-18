@@ -180,6 +180,58 @@ class AITests(unittest.TestCase):
 
 
 class JourneyTests(unittest.TestCase):
+    def test_finding_assessments_are_distinct_append_only_and_source_bound(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            detail=app.detail('T05')
+            findings=detail['analysis']['findings']
+            self.assertEqual(len(findings),4)
+            one=findings[1]
+            first=app.assess_finding('T05',one['id'],'problem','Reviewer','Resolve the precedence issue.')
+            self.assertEqual(first['revision'],1)
+            self.assertEqual(first['source_sha256'],detail['document']['sha256'])
+            self.assertEqual(first['reference_sha256'],detail['reference']['sha256'])
+            duplicate=app.assess_finding('T05',one['id'],'problem','Reviewer','Resolve the precedence issue.')
+            self.assertEqual(duplicate['id'],first['id'])
+            revised=app.assess_finding('T05',one['id'],'acceptable','Reviewer','Accepted with the stated scope.')
+            self.assertEqual(revised['revision'],2)
+            self.assertEqual(revised['supersedes'],first['id'])
+            with self.assertRaises(ValueError):
+                app.assess_finding('T05',one['id'],'deal_breaker','Reviewer','')
+            with self.assertRaises(ValueError):
+                app.assess_finding('T05','invented','acceptable','Reviewer','')
+            reloaded=App(ROOT,Path(temp)).detail('T05')
+            self.assertEqual(len(reloaded['finding_assessments']),2)
+            self.assertEqual(reloaded['latest_finding_assessments'][one['id']]['assessment'],'acceptable')
+
+    def test_contract_actions_are_separate_and_accept_requires_original_review(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            finding=app.detail('T03')['analysis']['findings'][0]
+            app.assess_finding('T03',finding['id'],'deal_breaker','Reviewer','Unacceptable as drafted.')
+            with self.assertRaises(ValueError):
+                app.record_contract_action('T03','accept_contract','Reviewer','Override.',True)
+            with self.assertRaises(ValueError):
+                app.record_contract_action('T01','accept_contract','Reviewer','Reviewed.',False)
+            accepted=app.record_contract_action('T01','accept_contract','Reviewer','Independently reviewed original.',True)
+            flagged=app.record_contract_action('T01','flag_for_review','Reviewer','Need a second reviewer.',False)
+            self.assertEqual(accepted['decision'],'approve')
+            self.assertEqual(accepted['contract_action'],'accept_contract')
+            self.assertEqual(flagged['decision'],'request_amendment')
+            self.assertEqual(flagged['contract_action'],'flag_for_review')
+            self.assertEqual(len(App(ROOT,Path(temp)).detail('T01')['contract_actions']),2)
+
+    def test_new_intake_can_be_flagged_without_misusing_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            data=(ROOT/'dataset/incoming/T01-template-match.docx').read_bytes()
+            intake=app.intake(data,'incoming.docx')
+            event=app.record_contract_action(intake['id'],'flag_for_review','Reviewer','Confirm which reference applies.')
+            self.assertEqual(event['decision'],'request_amendment')
+            self.assertEqual(event['contract_action'],'flag_for_review')
+            refreshed=App(ROOT,Path(temp)).intake_detail(intake['incoming']['sha256'])
+            self.assertEqual(refreshed['human_decision']['last_decision']['contract_action'],'flag_for_review')
+
     def test_http_queue_original_decision_refresh_and_upload(self):
         with tempfile.TemporaryDirectory() as temp:
             Handler.app=App(ROOT,Path(temp))
