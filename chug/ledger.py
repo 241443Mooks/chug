@@ -36,7 +36,7 @@ class Ledger:
                 events = [json.loads(line) for line in handle if line.strip()]
         return [event for event in events if event["sha256"] == sha256] if sha256 else events
 
-    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None, independent_original_reviewed=False, contract_action=None):
+    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None, independent_original_reviewed=False, contract_action=None, unresolved_findings_acknowledged=False):
         if not isinstance(decision, str) or decision not in DECISIONS or not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(rationale, str) or not rationale.strip() or len(reviewer) > 100 or len(rationale) > 2000 or not isinstance(conditions, str) or len(conditions) > 1000:
             raise ValueError("Choose a decision and provide reviewer name and rationale")
         if not isinstance(finding_ids, list) or any(not isinstance(item, str) for item in finding_ids):
@@ -51,6 +51,8 @@ class Ledger:
             event["reference_sha256"] = reference_sha256
         if independent_original_reviewed:
             event["independent_original_reviewed"] = True
+        if unresolved_findings_acknowledged:
+            event["unresolved_findings_acknowledged"] = True
         if contract_action:
             event["contract_action"] = contract_action
         _append(self.path, self.lock, event)
