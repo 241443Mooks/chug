@@ -61,7 +61,9 @@ class LearningLoopTests(unittest.TestCase):
         self.assertFalse(any(p.get("kind") == "published_demo" for p in second_before["analysis"]["precedents"]))
 
         finding = next(f for f in first_detail["analysis"]["findings"] if f["title"] == "Changed: Return or Destruction")
-        decision = self.post("/api/decisions", {"document_id": first, "reviewer": "Demo legal reviewer", "decision": "approve", "rationale": "Audit retention is acceptable only with restricted access.", "conditions": "Named regulatory duty; compliance access only; annual deletion review.", "finding_ids": [finding["id"]]})
+        decision = self.post("/api/decisions", {"document_id": first, "reviewer": "Demo legal reviewer", "decision": "approve", "rationale": "Audit retention is acceptable only with restricted access.", "conditions": "Named regulatory duty; compliance access only; annual deletion review.", "finding_ids": [finding["id"]], "independent_original_reviewed": True, "unresolved_findings_acknowledged": True})
+        self.assertTrue(decision["independent_original_reviewed"])
+        self.assertTrue(decision["unresolved_findings_acknowledged"])
         self.assertEqual(decision["considered_sources"], [{"finding_id": finding["id"], "anchor": finding["sources"][0]["anchor"], "text": finding["sources"][0]["text"]}])
         # A recorded approval is private history until a separate publication event.
         self.assertFalse(any(p.get("kind") == "published_demo" for p in self.get("/api/contracts/" + second)["analysis"]["precedents"]))
