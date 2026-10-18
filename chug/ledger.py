@@ -35,7 +35,7 @@ class Ledger:
                 events = [json.loads(line) for line in handle if line.strip()]
         return [event for event in events if event["sha256"] == sha256] if sha256 else events
 
-    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None):
+    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None, independent_original_reviewed=False):
         if not isinstance(decision, str) or decision not in DECISIONS or not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(rationale, str) or not rationale.strip() or len(reviewer) > 100 or len(rationale) > 2000 or not isinstance(conditions, str) or len(conditions) > 1000:
             raise ValueError("Choose a decision and provide reviewer name and rationale")
         if not isinstance(finding_ids, list) or any(not isinstance(item, str) for item in finding_ids):
@@ -48,6 +48,41 @@ class Ledger:
         event = {"id": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(), "sha256": sha256, "filename": filename, "reviewer": reviewer.strip(), "decision": decision, "rationale": rationale.strip(), "conditions": conditions.strip(), "finding_ids": finding_ids, "considered_sources": considered_sources}
         if reference_sha256 is not None:
             event["reference_sha256"] = reference_sha256
+        if independent_original_reviewed:
+            event["independent_original_reviewed"] = True
+        _append(self.path, self.lock, event)
+        return event
+
+
+class IntakeConfirmationLedger:
+    """Append-only record of an explicit reference-applicability confirmation."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.lock = Lock()
+
+    def all(self, incoming_sha256=None):
+        if not self.path.exists():
+            return []
+        with self.lock:
+            with self.path.open(encoding="utf-8") as handle:
+                events = [json.loads(line) for line in handle if line.strip()]
+        ids = set()
+        for event in events:
+            if event.get("type") != "reference_confirmation" or not all(event.get(key) for key in ("id", "timestamp", "incoming_sha256", "filename", "reference_id", "reference_sha256", "reviewer", "rationale", "comparison")) or event["id"] in ids:
+                raise ValueError("Incoming reference confirmation history is invalid")
+            ids.add(event["id"])
+        return [event for event in events if incoming_sha256 is None or event["incoming_sha256"] == incoming_sha256]
+
+    def append(self, incoming_sha256, filename, reference_id, reference_sha256, reviewer, rationale, comparison, analysis=None):
+        if not isinstance(reviewer, str) or not reviewer.strip() or len(reviewer) > 100 or not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:
+            raise ValueError("Provide a reviewer name and reason for confirming reference applicability")
+        if not isinstance(incoming_sha256, str) or len(incoming_sha256) != 64 or not isinstance(reference_sha256, str) or len(reference_sha256) != 64 or not isinstance(comparison, dict):
+            raise ValueError("Invalid source, reference or comparison snapshot")
+        event = {"id": str(uuid4()), "type": "reference_confirmation", "timestamp": datetime.now(timezone.utc).isoformat(), "incoming_sha256": incoming_sha256, "filename": filename, "reference_id": reference_id, "reference_sha256": reference_sha256, "reviewer": reviewer.strip(), "rationale": rationale.strip(), "comparison": comparison}
+        if analysis is not None:
+            event["analysis"] = analysis
+        self.all(incoming_sha256)
         _append(self.path, self.lock, event)
         return event
 

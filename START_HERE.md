@@ -67,6 +67,8 @@ Open the following address in your browser:
 
 You can now explore the same fictional contracts, upload supported synthetic DOCX documents, record decisions and experiment with sharing and withdrawing previous decisions.
 
+For the new upload → matching → analysis → review queue flow, see [the Issue #8 walkthrough](docs/ISSUE_8_WALKTHROUGH.md).
+
 Your local demonstration data is stored on your computer. The application does not send contracts to an AI provider unless you deliberately configure and invoke the optional AI feature.
 
 **Please use fictional documents only.** This prototype is not designed for confidential or production information.

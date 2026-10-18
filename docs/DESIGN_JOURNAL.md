@@ -174,6 +174,13 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 
 **Evidence and uncertainty:** Python matching tests prove a compatible Active NDA is proposed while a customer-order standard and the legacy baseline are excluded; no comparison runs and human confirmation remains required. Local UI regression tests cover both library grouping and public/local control differences. Creative acceptance and live public-host behavior remain for the owner; no hosting changes were made.
 
+## Issue #8 — Matching needs a durable queue item, not a separate result screen
+
+**Observation:** The #7 matcher preserved a source-linked proposal, but a fresh match did not enter the review queue. Sending it through the legacy upload path would bind it to the globally selected NDA, even when the incoming document was a customer order or had no suitable reference.
+
+**Decision:** Give each incoming upload its own persisted intake record, reusing the extracted-document schema and existing family-aware matcher. Run a deterministic provisional NDA comparison only for a single context-compatible Active local NDA standard. For customer orders, require a reviewer to confirm the exact proposed reference ID and hash before calling `CustomerOrderReview.compare()`. Record reference confirmation separately from the incoming contract decision; keep decisions append-only and linked to the incoming hash. Unsupported, ambiguous and unmatched cases remain in the queue with a specific pending or blocked explanation.
+
+**Evidence and uncertainty:** Python tests cover provisional NDA comparison, customer-order confirmation and comparison, append-only human disposition, duplicate identity, restart, corrupted source, record integrity and API queue/detail/original retrieval. The local browser walkthrough showed a completed NDA comparison, an order comparison only after explicit confirmation, a recorded human amendment request, and a no-match order with comparison not run. The UI tests and Python API tests pass. PDF parsing, narrow-screen rendering and owner creative acceptance remain outside this milestone; the extracted-document seam is ready for the separate PDF normalizer.
 ## Issue #15 — Public exploration needs a real review surface
 
 **Observation:** The public static notice was inserted inside the two-column application grid, where it displaced the queue and workspace. The URL form `#/review/T03/overview` was parsed as an unknown route, and the public queue depended on a narrow permanent sidebar. Review data already contained complete extracted incoming/reference wording and precomputed findings, but no dedicated full-comparison view exposed it together.
@@ -181,3 +188,11 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Keep the public site static and read-only, move its notice below the header, give the queue and selected review the available width, and let every synthetic review open from a native button. Normalize an optional leading slash in hash routes. Show complete incoming and applicable-reference wording side by side and link finding passages to the exported finding details; do not imply that unflagged wording is equivalent.
 
 **Evidence and uncertainty:** Automated coverage now includes slash-prefixed deep links, every queue card, all six exported review comparisons and transient-only public filters. A local Chrome walkthrough opened the direct T03 URL, opened a queue card by keyboard, inspected the paired wording and finding evidence, and exercised browser back. Deployed-host behavior, mobile rendering and human creative acceptance remain unverified before the change is ready for review.
+
+## Issue #8 integration review — preserve the public review surface and stop clearly on incomplete analysis
+
+**Observation:** The #17 public review surface and #8 intake routing both depend on queue and navigation behavior. In the merged branch, an intake with extraction incomplete or comparison not run needed a clear page-level warning before reviewer decision controls. A saved comparison also needed to distinguish its historical snapshot from the current availability of its reference source.
+
+**Decision:** Preserve #17's read-only queue, deep links, complete comparison, history and browser navigation alongside #8 intake routing. Show an alert before decision controls whenever extraction is incomplete or comparison did not run. Keep saved comparison content available while explicitly marking an unavailable reference source as unverified.
+
+**Evidence and uncertainty:** The committed merge retains both interfaces; Python tests passed 78/78, the evaluator matched 6/6 routes, and Node UI tests passed 25/25. The adversarial audit surfaced 11/11 critical exceptions, with exact route agreement at 14/16. A local browser walkthrough covered public deep links and back navigation, an NDA comparison, order confirmation, an unmatched order, and reference-source removal and restoration. Narrow-screen and assistive-technology review and owner creative acceptance remain outstanding. The Cloudflare preview failure remains tracked separately in Issue #12.
