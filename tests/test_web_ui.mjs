@@ -8,14 +8,14 @@ const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
 const css=readFileSync(new URL('../web/styles.css',import.meta.url),'utf8');
 const falcon=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T03.json',import.meta.url),'utf8'));
 
-function harness(items){
+function harness(items,hostname='localhost'){
   const elements=new Map();
   const clicks=[];
   const node=id=>{
     if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',value:'',className:'',querySelectorAll:()=>[],querySelector:()=>null,click:()=>clicks.push(id)});
     return elements.get(id);
   };
-  const location={hash:'#home'};
+  const location={hash:'#home',hostname};
   const storage=new Map();
   const context=vm.createContext({
     document:{getElementById:node,querySelectorAll:()=>[],addEventListener:()=>{},title:''},
@@ -153,4 +153,47 @@ test('real API errors are not silently hidden behind the public snapshot',async(
   };
   await assert.rejects(h.run("api('/api/queue')"),/Invalid or empty JSON response/);
   assert.equal(h.run('state.staticDemo'),false);
+});
+
+test('public Cloudflare hostname reads the static queue directly and blocks write actions',async()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  const calls=[];
+  h.context.fetch=async(url)=>{
+    calls.push(url);
+    const fixtures={
+      '/demo-data/queue.json':{items},
+      '/demo-data/reference.json':{current:{kind:'bundled'}},
+      '/demo-data/contracts/T03.json':{id:'T03'},
+      '/demo-data/history/H03.json':{document:{id:'H03'}},
+    };
+    if(!(url in fixtures))throw new Error('Unexpected API request: '+url);
+    return {ok:true,headers:{get:()=> 'application/json'},json:async()=>fixtures[url]};
+  };
+  assert.equal(h.run('state.staticDemo'),true);
+  assert.equal((await h.run("api('/api/queue')")).items.length,4);
+  assert.equal((await h.run("api('/api/reference')")).current.kind,'bundled');
+  assert.equal((await h.run("api('/api/contracts/T03')")).id,'T03');
+  assert.equal((await h.run("api('/api/history/H03')")).document.id,'H03');
+  await assert.rejects(h.run("api('/api/decisions',{method:'POST'})"),/Read-only public demo/);
+  assert.deepEqual(calls,[
+    '/demo-data/queue.json',
+    '/demo-data/reference.json',
+    '/demo-data/contracts/T03.json',
+    '/demo-data/history/H03.json',
+  ]);
+});
+
+test('local Python host keeps the interactive API enabled',async()=>{
+  const h=harness(items,'127.0.0.1');
+  const calls=[];
+  h.context.fetch=async(url)=>{
+    calls.push(url);
+    if(url==='/api/queue')return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({items})};
+    if(url==='/api/decisions')return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({id:'new-decision'})};
+    throw new Error('Unexpected request: '+url);
+  };
+  assert.equal(h.run('state.staticDemo'),false);
+  assert.equal((await h.run("api('/api/queue')")).items.length,4);
+  assert.equal((await h.run("api('/api/decisions',{method:'POST'})")).id,'new-decision');
+  assert.deepEqual(calls,['/api/queue','/api/decisions']);
 });
