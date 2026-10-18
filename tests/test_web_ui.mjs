@@ -197,7 +197,8 @@ test('public queue renders every precomputed review as an open-review button',()
   const html=h.run('queueView()');
   assert.equal((html.match(/class="public-review-card"/g)||[]).length,items.length);
   for(const item of items)assert.match(html,new RegExp(`data-id="${item.id}"`));
-  assert.match(html,/Every route needs a human decision/);
+  assert.match(html,/A person must make each decision/);
+  assert.equal((html.match(/<option value="all"/g)||[]).length,1);
   assert.match(html,/public-filter/);
 });
 
