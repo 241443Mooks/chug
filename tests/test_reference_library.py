@@ -91,6 +91,28 @@ class ReferenceLibraryTests(unittest.TestCase):
         families = {row["family"] for row in rows if row["status"] == "active"}
         self.assertEqual(families, {"nda", "customer_order"})
 
+    def test_nda_matching_proposes_active_nda_and_excludes_wrong_family_and_legacy_baseline(self):
+        nda_data = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
+        order_data = new_customer_order_bytes()
+        order = self.app.upload_reference(order_data, "fictional-order.docx")["library_item"]
+        nda = self.app.upload_reference(nda_data, "fictional-nda.docx")["library_item"]
+        incoming = (ROOT / "dataset/incoming/T03-hidden-perpetual-licence.docx").read_bytes()
+
+        result = self.app.match_reference(incoming, "incoming-nda.docx")
+        proposal = result["proposal"]
+        self.assertEqual(proposal["status"], "proposed")
+        self.assertEqual(proposal["proposal"]["reference_id"], nda["reference_id"])
+        self.assertEqual(proposal["proposal"]["status"], "active")
+        self.assertTrue(proposal["human_confirmation_required"])
+        self.assertFalse(proposal["comparison_allowed"])
+        self.assertEqual(result["comparison"]["status"], "not_run")
+
+        excluded = {row["reference_id"]: row for row in proposal["excluded"]}
+        self.assertIn("family", " ".join(excluded[order["reference_id"]]["reasons"]))
+        bundled_id = "BASE-" + self.app.bundled_reference_sha256[:12]
+        self.assertIn(bundled_id, excluded)
+        self.assertIn("legacy NDA comparison baseline", " ".join(excluded[bundled_id]["reasons"]))
+
     def test_withdrawing_selected_nda_restores_bundled_baseline_for_new_uploads(self):
         nda_data = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
         result = self.app.upload_reference(nda_data, "fictional-mutual-nda.docx")

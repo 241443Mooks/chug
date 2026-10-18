@@ -145,7 +145,7 @@ class App:
             "direction": None, "purpose": None, "jurisdiction": None,
             "applicability": {name: {"state": "unknown", "value": None, "evidence": []} for name in ("family", "direction", "purpose", "deployment", "channel", "jurisdiction", "variant")},
             "original_filename": self.reference["filename"], "sha256": self.bundled_reference_sha256,
-            "version": "bundled", "status": "approved_reference", "approval_status": "approved",
+            "version": "bundled", "status": "legacy_nda_baseline",
             "provenance": "bundled_demo_baseline", "extraction": {"status": self.reference["coverage"]["status"], "limitations": list(self.reference["coverage"].get("issues", [])), "passage_count": len(self.reference["units"]), "parts": list(self.reference["coverage"].get("parts", []))},
         }
         base["applicability"]["family"] = {"state": "known", "value": "nda", "evidence": []}
@@ -234,7 +234,7 @@ class App:
                 raise ValueError("Stored incoming original is unavailable or changed")
             return existing["record"]
         references, unavailable = self._matching_references()
-        proposal = propose_reference(document, references, eligible_statuses={"active", "approved_reference"})
+        proposal = propose_reference(document, references, eligible_statuses={"active"})
         proposal["excluded"].extend(unavailable)
         record = {
             "incoming": {"filename": document["filename"], "sha256": digest},

@@ -260,7 +260,8 @@ def propose_reference(document: dict, references: list[dict], eligible_statuses:
         if status in {"superseded", "withdrawn"}:
             inactive.append({"reference_id": reference.get("reference_id"), "display_name": reference.get("display_name"), "status": status, "reasons": ["inactive standards are excluded from new matches"]})
         elif eligible_statuses is not None and status not in eligible_statuses:
-            inactive.append({"reference_id": reference.get("reference_id"), "display_name": reference.get("display_name"), "status": status, "reasons": ["research fixtures are not Active standards and are excluded from new matches"]})
+            reason = "legacy NDA comparison baseline is retained for the existing NDA flow and has no confirmed applicability metadata for new matching" if status == "legacy_nda_baseline" else "research fixtures are not Active standards and are excluded from new matches"
+            inactive.append({"reference_id": reference.get("reference_id"), "display_name": reference.get("display_name"), "status": status, "reasons": [reason]})
         else:
             eligible_references.append(reference)
     base = {"context": context, "proposal": None, "eligible": [], "excluded": inactive, "questions": [], "human_confirmation_required": True, "comparison_allowed": False}

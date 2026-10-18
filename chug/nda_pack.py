@@ -37,10 +37,10 @@ class NDAPack:
         known = reference["sha256"] == bundled_reference["sha256"]
         report = analyse(reference, document, historical if known else {}, decisions if known else {}, published)
         if not known:
-            report["assurance"]["limitations"].append("Uploaded reference has not been approved as organisational guidance; compare its provisions and context before deciding.")
+            report["assurance"]["limitations"].append("This uploaded synthetic reference is used for the comparison; review its provisions and applicability. The comparison does not decide the incoming contract.")
             if report["route"] == "routine_candidate":
                 report["route"] = "review_required"
-                report["reason"] = "Uploaded reference requires human validation before a routine route"
+                report["reason"] = "The existing NDA review guard requires human review for an uploaded reference"
         report["history_scope"] = {"historical_records": len(historical) if known else 0, "active_published_records": len(published), "shown": len(report["precedents"]), "method": "lexical ranking of changed passages and clause topics"}
         return report
 
