@@ -111,7 +111,7 @@ class ReviewFlagLedger:
             events = [json.loads(line) for line in handle if line.strip()]
         return [event for event in events if sha256 is None or event["sha256"] == sha256]
 
-    def append(self, *, sha256, filename, reviewer, rationale, reference_sha256=None):
+    def append(self, *, sha256, filename, reviewer, rationale, reference_sha256=None, reuse_last_if_same=True):
         if not isinstance(sha256, str) or len(sha256) != 64:
             raise ValueError("Invalid incoming source identity")
         if reference_sha256 is not None and (not isinstance(reference_sha256, str) or len(reference_sha256) != 64):
@@ -123,7 +123,7 @@ class ReviewFlagLedger:
         with self.lock:
             previous = [event for event in self.all(sha256)
                         if event.get("reference_sha256") == reference_sha256]
-            if previous and previous[-1]["reviewer"] == reviewer.strip() and previous[-1]["rationale"] == rationale.strip():
+            if reuse_last_if_same and previous and previous[-1]["reviewer"] == reviewer.strip() and previous[-1]["rationale"] == rationale.strip():
                 return previous[-1]
             event = {"id": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
                      "sha256": sha256, "filename": filename, "reference_sha256": reference_sha256,
