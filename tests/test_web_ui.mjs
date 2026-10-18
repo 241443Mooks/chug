@@ -265,7 +265,7 @@ test('reference page lists family and lifecycle status with detail, matching and
   h.run("state.referenceLibrary={references:[{reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',version:'1.0',source_integrity:'verified',sha256:'123'}],count:1}");
   h.run("state.referenceDetail={reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',kind:'uploaded_synthetic',version:'1.0',provenance:'local upload',original_filename:'order.docx',sha256:'123',source_integrity:'verified',variant:null,deployment:null,channel:null,jurisdiction:null,extraction:{status:'complete',passage_count:4,limitations:[]},original_url:'/api/reference-library/UP-123/original'}");
   const page=h.run('referenceView()');
-  assert.match(page,/Reference standards/);
+  assert.match(page,/Reference documents/);
   assert.match(page,/customer order · active/);
   assert.match(page,/data-reference-detail="UP-123"/);
   assert.match(page,/Fictional order · active/);
@@ -280,27 +280,27 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   h.run("state.reference={current:{filename:'bundled.docx',kind:'bundled',sha256:'base',coverage:{status:'complete'},source_integrity:'verified',units:[]},available:[]}");
   h.run("state.referenceLibrary={references:[{reference_id:'BASE-base',display_name:'Bundled mutual NDA',family:'nda',status:'legacy_nda_baseline',version:'bundled',provenance:'bundled_demo_baseline',source_integrity:'verified',sha256:'base'},{reference_id:'UP-order',display_name:'Fictional order',family:'customer_order',status:'active',version:'1.0',provenance:'locally_uploaded_synthetic_reference',source_integrity:'verified',sha256:'order'},{reference_id:'NDA-1',display_name:'Research NDA',family:'nda',status:'research_candidate',version:'0.1',provenance:'verified_research_catalogue',source_integrity:'verified',sha256:'research'}]}");
   const page=h.run('referenceView()');
-  assert.match(page,/family-aware library of fictional contract standards/);
-  assert.match(page,/Fictional Legal standards/);
+  assert.match(page,/This library shows the type, version and status/);
+  assert.match(page,/References added by Legal/);
   assert.match(page,/Fictional Legal upload/);
-  assert.match(page,/Legacy NDA comparison baseline/);
-  assert.match(page,/excluded from new applicability matching/);
-  assert.match(page,/Synthetic research catalogue · research candidates/);
+  assert.match(page,/Original NDA reference/);
+  assert.match(page,/will not suggest it for new contracts/);
+  assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/family-aware reference library/);
-  assert.match(h.run('helpView()'),/public demo is a static, read-only snapshot/);
+  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/public demo only shows fictional examples/);
 });
 
 test('public reference view is read-only and keeps standards separate from incoming examples',()=>{
   const h=harness(items,'chug.smooks.co.uk');
   h.run("state.research={references:Array.from({length:8},(_,i)=>({id:'R'+i,name:'Research standard '+i,family:'nda',version:'0.1',sha256:'hash'+i,download:'/research/'+i+'.docx'})),routine_clients:[{name:'Client example',family:'incoming',download:'/client.docx'}],challenge_cases:[{name:'Challenge example',family:'incoming',download:'/challenge.docx'}]}");
   const page=h.run('referenceView()');
-  assert.match(page,/static, read-only snapshot/);
-  assert.match(page,/Synthetic research catalogue · research candidates/);
-  assert.match(page,/8 fictional source specimens/);
-  assert.match(page,/Incoming example documents · not standards/);
-  assert.match(page,/routine-looking client examples/);
-  assert.match(page,/incoming challenge examples/);
+  assert.match(page,/You can view the files, but you cannot upload or compare new contracts here/);
+  assert.match(page,/Examples for testing — not reference documents/);
+  assert.match(page,/8 fictional examples/);
+  assert.match(page,/Example contracts — not references/);
+  assert.match(page,/client contract examples \(not checked\)/);
+  assert.match(page,/examples with possible problems \(not checked\)/);
   assert.doesNotMatch(page,/id="reference-upload"|id="match-upload"|data-use-reference|data-select-reference/);
   assert.doesNotMatch(page,/future work \(#21\)|live multi-family comparison is available/);
 });
@@ -332,4 +332,22 @@ test('selected reference view preserves source identity and avoids an approval c
   assert.match(html,/bundled synthetic mutual NDA baseline bound to this precomputed review/);
   assert.match(html,new RegExp(falcon.reference.sha256));
   assert.match(html,/do not establish current organisational approval/);
+});
+
+
+test('public pages use clear tasks and keep human decision limits visible',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  const home=h.run('homeView()');
+  const queue=h.run('queueView()');
+  const help=h.run('helpView()');
+  assert.match(home,/Review a contract/);
+  assert.match(home,/You decide what happens next/);
+  assert.match(queue,/These labels help you choose what to check/);
+  assert.match(help,/Open the review queue/);
+  assert.match(help,/You cannot save a decision on this public site/);
+  assert.match(help,/A past decision does not approve a new contract/);
+  assert.match(help,/AI cannot approve a contract/);
+  const history=readFileSync(new URL('../web/decision-log.html',import.meta.url),'utf8');
+  assert.match(history,/These decisions are made up/);
+  assert.match(history,/Do not use these examples as approval/);
 });
