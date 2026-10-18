@@ -96,7 +96,7 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 
 **Observation:** The reviewer-facing name and the launch command used different product names, making a simple user-test handoff confusing.
 
-**Decision:** Use ChugChug consistently for the interface, Python package, optional AI settings and default local state path. Keep older dated test records and working GitHub links as historical identifiers. The local rename changes no review policy or safety route; the renamed app passed the existing tests and rendered smoke check. The repository slug still requires a separate GitHub rename.
+**Decision:** Use Chug consistently for the interface, Python package, optional AI settings and default local state path. Keep older dated test records and working GitHub links as historical identifiers. The local rename changes no review policy or safety route; the renamed app passed the existing tests and rendered smoke check. The repository slug still requires a separate GitHub rename.
 
 ## Entry 013 — Show the decision and its evidence before the machinery
 

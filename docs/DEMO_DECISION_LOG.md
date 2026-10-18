@@ -5,7 +5,7 @@ A separate browseable set of **300 entirely invented** past decision scenarios i
 ## Open it
 - Static demo: `/decision-log.html`; navigate from the Decision log link in the header. Filter by six incoming cases, prior outcome, or a search term.
 - Local Python demo: the same `/decision-log.html` path is read-only, served from an explicit allowlist.
-- To rebuild the static snapshot: `python3 scripts/export_public_demo.py`. This copies only the reviewed fictional source fixture, never `.chugchug-data/decisions.jsonl` or actual local decisions.
+- To rebuild the static snapshot: `python3 scripts/export_public_demo.py`. This copies only the reviewed fictional source fixture, never `.chug-data/decisions.jsonl` or actual local decisions.
 
 ## What the data is
 - `dataset/review_records/demo_decision_log.json` is the canonical fictional fixture. `web/demo-data/decision-log.json` is the static copy.

@@ -1,4 +1,4 @@
-# ChugChug — Engineering, commercial and user-experience principles
+# Chug — Engineering, commercial and user-experience principles
 
 ## Governing principle
 **AI must earn its place.** Start with the user problem and a conventional engineering baseline. Use AI only where a demonstrable benefit justifies its complexity, recurring cost, latency, privacy exposure and failure modes. This is an AI-focused application exercise, so demonstrate at least one **genuine, justified** AI capability; do not scatter AI across features simply to make the product look AI-powered.
@@ -52,4 +52,4 @@ For each major feature document: the user problem, existing solution/baseline, e
 Before implementing each significant AI-assisted feature, record a short architecture decision in `docs/decisions/`: problem, options, baseline, expected benefit, risks, cost/latency assumptions, selection, verification plan, and fallback. Decisions can be revised as tests reveal evidence.
 
 ## Submission story
-Show that ChugChug began with the legal team's workload and risk, not with a model. Explain why conventional software carries the current journey and where the optional real-model adapter might add value. Demonstrate observed outcomes, distinguish mocked tests from live provider evidence, and state limitations plainly.
+Show that Chug began with the legal team's workload and risk, not with a model. Explain why conventional software carries the current journey and where the optional real-model adapter might add value. Demonstrate observed outcomes, distinguish mocked tests from live provider evidence, and state limitations plainly.

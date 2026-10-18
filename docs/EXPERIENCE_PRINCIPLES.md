@@ -1,4 +1,4 @@
-# ChugChug — Experience principles and review journeys
+# Chug — Experience principles and review journeys
 
 ## North star
 **Simple on the surface. Exceptionally robust underneath.** Minimise user effort and cognitive load without concealing evidence, gaps or uncertainty.

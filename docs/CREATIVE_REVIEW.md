@@ -1,4 +1,4 @@
-# ChugChug — Human creative review checkpoint
+# Chug — Human creative review checkpoint
 
 This is a **human judgement gate**, separate from automated correctness tests. Codex must prepare evidence and proposals, not self-certify creative quality or silently expand scope.
 
