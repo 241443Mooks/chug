@@ -317,16 +317,25 @@ class App:
             status, route, reason = "blocked_extraction", "blocked_extraction", "; ".join(document["coverage"]["issues"])
             comparison = {"status": "not_run", "reason": "Extraction is incomplete; comparison was not performed."}
         elif proposal.get("status") in {"proposed", "proposed_with_gaps"} and family == "customer_order":
-            status, route = "awaiting_reference", "review_required"
-            reason = "Customer-order reference applicability needs explicit reviewer confirmation before comparison."
-        elif proposal.get("status") == "proposed" and family == "nda" and candidate.get("sha256") in self.references:
+            library_item = self.reference_library.get(candidate.get("reference_id"))
+            if library_item and library_item["metadata"].get("status") == "active" and self._library_source_integrity(library_item) == "verified" and library_item["metadata"]["sha256"] == candidate.get("sha256"):
+                reference_record = {**library_item["metadata"], "document": library_item["document"]}
+                report = CustomerOrderPack().compare(reference_record, document)
+                if report["checks"]["comparison"] == "complete":
+                    comparison = {"status": "complete", "method": "deterministic section and text comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "observations": [CustomerOrderReview._observation(finding) for finding in report["findings"]], "reason": report["reason"], "route": report["route"], "limitations": report.get("assurance", {}).get("limitations", []), "provisional": True, "human_decision_required": True, "approved": False}
+                    status, route, reason = "analysed_needs_review", "review_required", "Chug selected a context-compatible customer-order reference and compared it on upload. Check the proposed reference and findings before deciding."
+                else:
+                    status, route, reason = "awaiting_reference", "review_required", "The proposed customer-order comparison did not complete; review the reference and source."
+            else:
+                status, route, reason = "awaiting_reference", "review_required", "The proposed customer-order reference is not Active or its original could not be verified."
+        elif proposal.get("status") in {"proposed", "proposed_with_gaps"} and family == "nda" and candidate.get("sha256") in self.references:
             library_item = self.reference_library.get(candidate.get("reference_id"))
             if library_item and library_item["kind"] == "uploaded_synthetic" and library_item["metadata"].get("status") == "active" and self._library_source_integrity(library_item) == "verified":
                 reference = self.references[candidate["sha256"]]["document"]
                 comparison_report = self.pack.analyse(reference, document, {}, {}, [], self.reference)
                 analysis = comparison_report
-                comparison = {"status": "analysed", "method": "deterministic NDA comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "findings": comparison_report["findings"], "route": comparison_report["route"], "reason": comparison_report["reason"], "limitations": comparison_report["assurance"].get("limitations", [])}
-                status, route, reason = "analysed_needs_review", "review_required", "Provisional comparison is complete; a person must confirm reference applicability and decide the contract."
+                comparison = {"status": "analysed", "method": "deterministic NDA comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "findings": comparison_report["findings"], "route": comparison_report["route"], "reason": comparison_report["reason"], "limitations": comparison_report["assurance"].get("limitations", []), "provisional": True, "human_decision_required": True, "approved": False}
+                status, route, reason = "analysed_needs_review", "review_required", "Chug selected a context-compatible NDA reference and compared it on upload. Check the proposed reference and findings before deciding."
             else:
                 status, route = "awaiting_reference", "review_required"
                 reason = "The proposed NDA reference is not an active, integrity-verified local standard; comparison was not run."

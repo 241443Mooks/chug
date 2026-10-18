@@ -40,7 +40,7 @@ class IncomingIntakeTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def test_selected_research_specimens_register_separately_and_compare_on_upload(self):
+    def test_registered_specimens_are_found_and_compared_without_per_upload_selection(self):
         specimens = [
             ("references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx", "Incoming - Desktop Reseller Seat Increase.docx", "customer_order", "complete"),
             ("references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx", "Incoming - Evaluation NDA with Longer Retention.docx", "nda", "analysed"),
@@ -53,13 +53,16 @@ class IncomingIntakeTests(unittest.TestCase):
             self.assertEqual(registered["status"], "active")
             self.assertEqual(registered["family"], family)
             self.assertTrue(any(row["sha256"] == registered["sha256"] and row["status"] == "research_candidate" for row in self.app.reference_library_list()["references"]))
-            detail = self.app.intake(incoming.read_bytes(), incoming.name, registered["reference_id"], "Fictional reviewer", "Checked the family, channel and scope against this standard.")
+            detail = self.app.intake(incoming.read_bytes(), incoming.name)
             self.assertEqual(detail["comparison"]["status"], expected_status)
-            self.assertEqual(detail["reference_confirmation"]["sha256"], registered["sha256"])
+            self.assertEqual(detail["reference"]["sha256"], registered["sha256"])
+            self.assertIn(detail["matching"]["proposal"]["status"], {"proposed", "proposed_with_gaps"})
+            self.assertTrue(detail["comparison"]["provisional"])
+            self.assertNotIn("reference_confirmation", detail)
             self.assertEqual(detail["human_decision"]["status"], "pending")
             restored = App(ROOT, self.state).intake_detail(detail["incoming"]["sha256"])
             self.assertEqual(restored["comparison"], detail["comparison"])
-            duplicate = self.app.intake(incoming.read_bytes(), "copy.docx", registered["reference_id"], "Fictional reviewer", "Same choice")
+            duplicate = self.app.intake(incoming.read_bytes(), "copy.docx")
             self.assertEqual(duplicate["id"], detail["id"])
         self.assertEqual(len(self.app.intakes), 2)
 
@@ -79,10 +82,11 @@ class IncomingIntakeTests(unittest.TestCase):
             source = base / relative
             data = source.read_bytes()
             registered = self.app.upload_reference(data, source.name)["library_item"]
-            result = self.app.intake(data, "Incoming " + source.name, registered["reference_id"], "Fictional reviewer", "Exact source and scope match.")
+            result = self.app.intake(data, "Incoming " + source.name)
             self.assertEqual(result["comparison"].get("findings", result["comparison"].get("observations")), [])
             self.assertEqual(result["human_decision"]["status"], "pending")
-            self.assertEqual(result["reference_confirmation"]["sha256"], registered["sha256"])
+            self.assertEqual(result["reference"]["sha256"], registered["sha256"])
+            self.assertNotIn("reference_confirmation", result)
 
     def test_http_explicit_reference_upload_runs_comparison(self):
         source = ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"
@@ -145,16 +149,17 @@ class IncomingIntakeTests(unittest.TestCase):
         self.assertEqual(result["status"], "analysed_needs_review")
         self.assertEqual(result["matching"]["incoming"]["sha256"], extracted["sha256"])
 
-    def test_customer_order_is_queued_without_bypassing_confirmation(self):
+    def test_customer_order_is_compared_automatically_but_remains_unconfirmed(self):
         reference = changed_docx(ORDER.read_bytes(), b"12 named desktop software users", b"13 named desktop software users")
         incoming = changed_docx(reference, b"13 named desktop software users", b"14 named desktop software users")
         self.app.upload_reference(reference, ORDER.name)
 
         result = self.app.intake(incoming, "fictional-customer-order.docx")
         self.assertEqual(result["family"], "customer_order")
-        self.assertEqual(result["status"], "awaiting_reference")
-        self.assertEqual(result["comparison"]["status"], "not_run")
-        self.assertIn("explicit reviewer confirmation", result["reason"])
+        self.assertEqual(result["status"], "analysed_needs_review")
+        self.assertEqual(result["comparison"]["status"], "complete")
+        self.assertTrue(result["comparison"]["provisional"])
+        self.assertNotIn("reference_confirmation", result)
         self.assertEqual(result["human_decision"]["status"], "pending")
         self.assertTrue(any(row.get("intake_sha256") == result["incoming"]["sha256"] for row in self.app.queue()))
 

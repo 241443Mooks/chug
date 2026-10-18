@@ -1,18 +1,18 @@
-# Select a reference and compare on upload
+# Automatic reference selection and comparison on upload
 
-In the local/private synthetic workspace, register a fictional Legal reference on the References page. An upload of an existing research specimen deliberately creates a separate Active record; the research catalogue entry remains a research candidate. The upload accepts structurally complete NDAs with different clause headings from the legacy baseline.
+The local/private synthetic workspace searches its **Active, integrity-verified reference library** when a user uploads an incoming DOCX. No per-contract reference selection is needed. Chug extracts the document family and applicability facts, excludes incompatible references, and uses source-supported scope ranking when more than one candidate remains. It selects a reference only when one candidate stands ahead. A tie, conflicting source facts, missing required context, blocked extraction, or no eligible reference leaves the incoming original in the queue with `comparison: not_run` and a reason.
 
-In the review queue, choose **Compare against** before selecting an incoming DOCX. Choose an Active reference, enter a reviewer name and the reason it applies, then use **Add DOCX and compare**. The server verifies the exact reference ID and original SHA-256, the extracted agreement family, and required applicability facts. If the chosen reference is incompatible or the source is incomplete, it refuses the comparison. An eligible NDA or customer order is compared within the upload request; the separate reference confirmation and comparison remain attached to the exact incoming original across restart. The contract decision remains pending even if no differences are found.
+For a supported NDA or customer order with a suitable Active reference, the server compares the two original documents **within the upload request**. The comparison and selected reference ID/hash survive restart. The queue displays source-linked differences or states that none were reported. This result is **provisional**: Chug has proposed a reference, not verified legal applicability or accepted the contract. A reviewer may confirm reference applicability separately and must independently decide the contract. Zero differences do not automatically approve it.
 
-The default **Suggest an Active reference** path keeps conservative matching: an unambiguous NDA may receive a provisional comparison on upload; customer orders need a person's reference confirmation before their comparison. A selection is bound to the incoming source. Re-uploading the same bytes does not silently switch that binding.
+The fictional research catalogue remains marked `research_candidate`. Registering a chosen specimen as an Active fictional standard is a one-time controlled library setup; it does not elevate the research record or require a user to classify each subsequent incoming contract. The public static site remains read-only and cannot accept uploads. No private hosting or bulk import is included here.
 
-The public site is a read-only static demonstration and cannot upload documents. This change does not deploy a private host or import the full research corpus.
+For a repeatable local starter workspace, run `python3 scripts/seed_synthetic_starter.py --state-dir /tmp/chug-starter` from the repository root, then start the local server against that state directory. The script registers two fictional standards and creates four real queue intakes (an exact copy and a changed example for each family). It passes no reference ID to intake, so it exercises automatic selection. Re-running it keeps the same source-bound queue records.
 
-## First controlled examples
+## Demonstrated paths
 
-- Mutual NDA — Product Evaluation (UK): exact copy has zero reported differences. Evaluation NDA with longer retention produces source-linked findings.
-- Customer Order — Reseller Desktop Licences: exact copy has zero reported differences. Desktop reseller seat increase produces two observations.
+- Registered Product Evaluation NDA → incoming evaluation NDA with longer retention: automatic NDA match and source-linked comparison findings.
+- Registered Reseller Desktop customer-order standard → incoming desktop reseller seat increase: automatic customer-order match and two observations.
+- Exact copies of either standard: zero reported differences, with human review pending.
+- Ambiguous reseller cloud purchase: no suitable matching standard, no comparison and no automatic approval.
 
-These are fictional synthetic examples, not approved real-world legal standards. The no-difference result means only that the supported deterministic checks found no textual/structural differences. A reviewer still needs to inspect the original and decide the contract.
-
-The next corpus step is one or two independently checked exact-match incoming examples for each of the eight research reference variants, followed by changed-term and difficult cases. Keep the withheld answer key out of runtime inputs, run the three-document positive/abstain pilot and blinded matching check first, then expand toward 200–300 fictional incoming contracts in measured batches.
+These are fictional synthetic examples. The next corpus step is one or two independently checked exact-match incoming examples for each of the eight research reference variants, followed by changed-term and difficult cases. Keep the withheld answer key outside runtime inputs, complete the blinded matching check, and then grow toward 200–300 fictional contracts in measured batches.

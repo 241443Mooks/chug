@@ -199,4 +199,4 @@ body.static-demo .tabs{gap:clamp(12px,2vw,26px);overflow:auto}
   .comparison-heading{display:block}
   .comparison-heading>p{margin-top:10px}
 }
-.incoming-upload{padding:0 22px 18px;display:grid;gap:8px}.incoming-upload[hidden]{display:none}.incoming-upload label{font-size:12px;font-weight:700;color:#45546a}.incoming-upload select,.incoming-upload input,.incoming-upload textarea{width:100%;background:#fff;border:1px solid #b8c0c7;border-radius:4px;padding:8px;color:var(--ink)}.incoming-upload #upload-confirmation:not([hidden]){display:grid;gap:7px}.incoming-upload #upload-confirmation p{font-size:12px;color:var(--muted);margin:0}.incoming-upload textarea{min-height:55px;resize:vertical}.incoming-upload button{justify-self:start}
+.incoming-upload{padding:0 22px 18px;display:grid;gap:8px}.incoming-upload[hidden]{display:none}.incoming-upload p{font-size:12px;color:var(--muted);margin:0}.incoming-upload button{justify-self:start}

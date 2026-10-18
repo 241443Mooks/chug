@@ -336,7 +336,7 @@ def propose_reference(document: dict, references: list[dict], eligible_statuses:
     return {
         **base,
         "status": status,
-        "reason": "One context-compatible reference remains. Confirm its applicability before comparison.",
+        "reason": "Chug found a context-compatible Active reference. Check that it applies to this contract." if not alternatives else "Chug selected the context-compatible reference with the strongest shared scope wording. Check that it applies to this contract.",
         "proposal": _public_candidate(item),
         "alternatives": alternatives,
         "excluded": excluded,

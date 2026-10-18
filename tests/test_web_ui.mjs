@@ -139,7 +139,7 @@ test('T05 findings 2 and 4 survive the finding → comparison → finding round 
 
 test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
   const h=harness(items);
-  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX and compare<\/button>/);
+  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Upload and compare DOCX<\/button>/);
   assert.match(html,/<input id="upload" type="file" accept="\.docx" hidden>/);
   assert.equal(typeof h.node('upload-trigger').onclick,'function');
   h.node('upload-trigger').onclick();
@@ -387,12 +387,12 @@ test('new intake detail shows a provisional comparison with source anchors and t
     analysis:{findings:[{title:'Changed retention',explanation:'The period differs.',sources:[{anchor:'word/document.xml:p4',text:'Confidentiality lasts seven years.'}],reference:{anchor:'word/document.xml:p4',text:'Confidentiality lasts five years.'}}]}
   }));
   const complete=h.run('intakeView(state.intake)');
-  assert.match(complete,/Proposed reference · not confirmed/);
+  assert.match(complete,/Chug selected this reference · check applicability/);
   assert.match(complete,/word\/document.xml:p4/);
   assert.match(complete,/provisional NDA comparison/);
   assert.match(complete,/Download exact incoming DOCX/);
   assert.match(complete,/Record your review decision/);
-  assert.match(complete,/Confirm reference and compare/);
+  assert.match(complete,/Confirm reference applicability/);
   assert.match(complete,/independently inspect the exact incoming original/);
   assert.match(complete,/independent_original_reviewed/);
   assert.match(source,/reviewed\.required=decision\.value==='approve'/);
