@@ -1,6 +1,6 @@
 # Routine-looking synthetic client contracts (20)
 
-**Research fixtures only. Not included in the active ChugChug application and not approved legal documents.**
+**Research fixtures only. Not included in the active Chug application and not approved legal documents.**
 
 These 20 client examples span the 8 fictional reference variants in the parent folder:
 

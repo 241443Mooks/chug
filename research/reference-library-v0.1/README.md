@@ -1,4 +1,4 @@
-# ChugChug — synthetic reference-library research (v0.1)
+# Chug — synthetic reference-library research (v0.1)
 
 **Status: research fixtures, not supported by the running application, and not legally approved.**
 
