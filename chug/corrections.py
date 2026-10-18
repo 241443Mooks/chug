@@ -1,6 +1,6 @@
 """Append-only reviewer corrections and separately authorised reusable lessons.
 
-A comparison correction is an observation about ChugChug's analysis, never a
+A comparison correction is an observation about Chug's analysis, never a
 contract decision. The ledger is intentionally small and rebuilds its active
 view from the event stream rather than maintaining a second mutable index.
 """
