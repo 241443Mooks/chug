@@ -40,6 +40,73 @@ class IncomingIntakeTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_selected_research_specimens_register_separately_and_compare_on_upload(self):
+        specimens = [
+            ("references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx", "Incoming - Desktop Reseller Seat Increase.docx", "customer_order", "complete"),
+            ("references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx", "Incoming - Evaluation NDA with Longer Retention.docx", "nda", "analysed"),
+        ]
+        base = ROOT / "research/reference-library-v0.1"
+        for reference_name, incoming_name, family, expected_status in specimens:
+            source = base / reference_name
+            incoming = base / "incoming-tests" / incoming_name
+            registered = self.app.upload_reference(source.read_bytes(), source.name)["library_item"]
+            self.assertEqual(registered["status"], "active")
+            self.assertEqual(registered["family"], family)
+            self.assertTrue(any(row["sha256"] == registered["sha256"] and row["status"] == "research_candidate" for row in self.app.reference_library_list()["references"]))
+            detail = self.app.intake(incoming.read_bytes(), incoming.name, registered["reference_id"], "Fictional reviewer", "Checked the family, channel and scope against this standard.")
+            self.assertEqual(detail["comparison"]["status"], expected_status)
+            self.assertEqual(detail["reference_confirmation"]["sha256"], registered["sha256"])
+            self.assertEqual(detail["human_decision"]["status"], "pending")
+            restored = App(ROOT, self.state).intake_detail(detail["incoming"]["sha256"])
+            self.assertEqual(restored["comparison"], detail["comparison"])
+            duplicate = self.app.intake(incoming.read_bytes(), "copy.docx", registered["reference_id"], "Fictional reviewer", "Same choice")
+            self.assertEqual(duplicate["id"], detail["id"])
+        self.assertEqual(len(self.app.intakes), 2)
+
+    def test_explicit_wrong_family_and_unverified_reference_are_blocked(self):
+        standard = (ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx")
+        incoming = (ROOT / "research/reference-library-v0.1/incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx")
+        registered = self.app.upload_reference(standard.read_bytes(), standard.name)["library_item"]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.app.intake(incoming.read_bytes(), incoming.name, registered["reference_id"], "Fictional reviewer", "Wrong family")
+        self.assertEqual(len(self.app.intakes), 0)
+        with self.assertRaisesRegex(ValueError, "Active reference"):
+            self.app.intake(incoming.read_bytes(), incoming.name, "ORDER-RESELLER", "Fictional reviewer", "Research only")
+
+    def test_exact_reference_copies_have_no_reported_differences_but_still_need_review(self):
+        base = ROOT / "research/reference-library-v0.1/references"
+        for relative in ("nda/Mutual NDA - Product Evaluation - UK - v0.1.docx", "sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"):
+            source = base / relative
+            data = source.read_bytes()
+            registered = self.app.upload_reference(data, source.name)["library_item"]
+            result = self.app.intake(data, "Incoming " + source.name, registered["reference_id"], "Fictional reviewer", "Exact source and scope match.")
+            self.assertEqual(result["comparison"].get("findings", result["comparison"].get("observations")), [])
+            self.assertEqual(result["human_decision"]["status"], "pending")
+            self.assertEqual(result["reference_confirmation"]["sha256"], registered["sha256"])
+
+    def test_http_explicit_reference_upload_runs_comparison(self):
+        source = ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"
+        incoming = ROOT / "research/reference-library-v0.1/incoming-tests/Incoming - Desktop Reseller Seat Increase.docx"
+        reference_id = self.app.upload_reference(source.read_bytes(), source.name)["library_item"]["reference_id"]
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Handler.app = self.app
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            boundary = "explicit-reference"
+            fields = [("reference_id", reference_id), ("reviewer", "Fictional reviewer"), ("rationale", "Reseller desktop scope applies.")]
+            body = b"".join((f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n').encode() for name, value in fields)
+            body += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="incoming.docx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + incoming.read_bytes() + f'\r\n--{boundary}--\r\n'.encode()
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/intakes", data=body, method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            result = json.loads(urlopen(request).read())
+            self.assertEqual(result["comparison"]["status"], "complete")
+            self.assertEqual(result["reference_confirmation"]["reference_id"], reference_id)
+            self.assertEqual(result["human_decision"]["status"], "pending")
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
     def test_new_nda_runs_provisional_comparison_and_persists_identity_and_queue(self):
         standard = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
         self.app.upload_reference(standard, "fictional-nda-standard.docx")

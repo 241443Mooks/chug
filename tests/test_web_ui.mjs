@@ -139,7 +139,7 @@ test('T05 findings 2 and 4 survive the finding → comparison → finding round 
 
 test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
   const h=harness(items);
-  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX<\/button>/);
+  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX and compare<\/button>/);
   assert.match(html,/<input id="upload" type="file" accept="\.docx" hidden>/);
   assert.equal(typeof h.node('upload-trigger').onclick,'function');
   h.node('upload-trigger').onclick();
@@ -339,7 +339,7 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/will not suggest it for new contracts/);
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/How references work/);
   assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
 });
 

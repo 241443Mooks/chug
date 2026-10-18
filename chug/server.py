@@ -19,6 +19,7 @@ from .ai import AIService, AIUnavailable
 from .document import extract
 from .nda_pack import NDAPack
 from .customer_order_review import CustomerOrderReview
+from .customer_order_pack import CustomerOrderPack
 from .ledger import IntakeConfirmationLedger, KnowledgeLedger, Ledger
 from .corrections import CorrectionLedger
 from .reference_registry import load_registry, propose_reference, uploaded_reference_metadata
@@ -266,24 +267,44 @@ class App:
             self._validate_extracted_document(data, document, filename)
             self.intakes[digest] = {"document": document, "path": path, "record": record}
 
-    def intake(self, data, filename):
+    def intake(self, data, filename, selected_reference_id=None, reviewer=None, rationale=None):
         if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
             raise ValueError("Choose one synthetic DOCX under 2 MB")
         document = extract(data, filename)
-        return self.intake_extracted(data, document)
+        return self.intake_extracted(data, document, selected_reference_id, reviewer, rationale)
 
-    def intake_extracted(self, data, document):
+    def intake_extracted(self, data, document, selected_reference_id=None, reviewer=None, rationale=None):
         document = self._validate_extracted_document(data, document, document.get("filename") if isinstance(document, dict) else None)
         digest = document["sha256"]
         existing = self.intakes.get(digest)
         if existing:
             if hashlib.sha256(existing["path"].read_bytes()).hexdigest() != digest:
                 raise ValueError("Stored incoming original is unavailable or changed")
-            return self.intake_detail(digest)
+            detail = self.intake_detail(digest)
+            if selected_reference_id and detail["reference"]["reference_id"] != selected_reference_id:
+                raise ValueError("This original is already bound to a different reference; its review cannot be silently changed")
+            return detail
 
+        selected_item = None
+        if selected_reference_id:
+            selected_item = self.reference_library.get(selected_reference_id)
+            if not selected_item or selected_item["metadata"].get("status") != "active" or self._library_source_integrity(selected_item) != "verified":
+                raise ValueError("Choose an Active reference with a verified original")
+            if not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(rationale, str) or not rationale.strip():
+                raise ValueError("Name the reviewer and explain why this reference applies")
+            if len(reviewer) > 100 or len(rationale) > 2000:
+                raise ValueError("Reviewer name or applicability reason is too long")
+
+        if selected_item:
+            chosen = {**selected_item["metadata"], "document": selected_item["document"]}
+            selection = propose_reference(document, [chosen], eligible_statuses={"active"})
+            if selection["status"] not in {"proposed", "proposed_with_gaps"} or selection.get("proposal", {}).get("reference_id") != selected_reference_id:
+                raise ValueError("Selected reference does not match the extracted family and applicability context: " + selection["reason"])
         # Reuse the established family-aware #7 proposal and retain its immutable source snapshot.
         matching = self.match_reference_extracted(data, document)
         matching = {key: value for key, value in matching.items() if key != "extracted_document"}
+        if selected_item:
+            matching = {**matching, "proposal": selection, "selection_mode": "explicit_on_upload"}
         proposal = matching["proposal"]
         family = (proposal.get("context", {}).get("dimensions", {}).get("family", {}) or {}).get("value")
         candidate = proposal.get("proposal") or {}
@@ -341,6 +362,8 @@ class App:
             json.dump(stored_record, handle, ensure_ascii=False); handle.flush(); os.fsync(handle.fileno())
         os.replace(temporary, meta)
         self.intakes[digest] = {"document": document, "path": original, "record": record}
+        if selected_item:
+            return self.confirm_intake_reference(digest, selected_reference_id, selected_item["metadata"]["sha256"], reviewer, rationale)
         return self.intake_detail(digest)
 
     def intake_detail(self, digest):
@@ -395,15 +418,12 @@ class App:
         confirmation = {"confirmed": True, "reference_id": reference_id, "sha256": reference_sha256, "reviewer": reviewer, "rationale": rationale, "timestamp": stamp}
         analysis = None
         if detail["family"] == "customer_order":
-            service = CustomerOrderReview(self.root)
             reference_record = {**library_item["metadata"], "document": library_item["document"]}
-            service.references.append(reference_record)
-            service.order_references[reference_id] = reference_record
-            compared = service.compare(detail["document"], reference_id, confirmation)
-            if compared.get("reference_confirmation", {}).get("status") != "confirmed":
-                raise ValueError(compared.get("routing", {}).get("reason", "Customer-order comparison could not confirm the selected baseline"))
-            raw = compared["comparison"]
-            comparison = {"status": raw["status"], "method": raw.get("method"), "baseline": raw.get("baseline"), "observations": raw.get("observations", []), "reason": compared["routing"].get("reason"), "route": compared["routing"].get("route"), "limitations": raw.get("assurance", {}).get("limitations", []), "human_decision_required": True, "approved": False}
+            report = CustomerOrderPack().compare(reference_record, detail["document"])
+            if report["checks"]["comparison"] != "complete":
+                raise ValueError("Customer-order comparison did not complete")
+            observations = [CustomerOrderReview._observation(finding) for finding in report["findings"]]
+            comparison = {"status": "complete", "method": "deterministic section and text comparison", "baseline": report["baseline"], "observations": observations, "reason": report["reason"], "route": report["route"], "limitations": report.get("assurance", {}).get("limitations", []), "human_decision_required": True, "approved": False}
         elif detail["family"] == "nda":
             reference = self.references.get(reference_sha256)
             if not reference:
@@ -639,7 +659,9 @@ class App:
         if classification["family"] == "nda":
             self._validate_reference(document)
         digest = document["sha256"]
-        existing = next((item for item in self.reference_library.values() if item["metadata"]["sha256"] == digest), None)
+        # Research specimens are visible examples, not controlled registrations.
+        # A deliberate upload of the same bytes creates a separate Active record.
+        existing = next((item for item in self.reference_library.values() if item["metadata"]["sha256"] == digest and item["kind"] == "uploaded_synthetic"), None)
         if existing:
             if self._library_source_integrity(existing) != "verified":
                 raise ValueError("Stored reference original is unavailable or changed; upload is blocked")
@@ -903,18 +925,28 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Request size is missing or exceeds the local limit")
         return self.rfile.read(length)
 
-    def _multipart_docx(self):
+    def _multipart_docx(self, with_fields=False):
         content_type = self.headers.get("Content-Type", "")
         if not content_type.startswith("multipart/form-data;"):
             raise ValueError("Choose a DOCX file")
         data = self._body()
         message = BytesParser(policy=policy.default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode() + b"\r\n\r\n" + data)
-        files = [part for part in message.iter_parts() if part.get_param("name", header="content-disposition") == "file"] if message.is_multipart() else []
+        parts = list(message.iter_parts()) if message.is_multipart() else []
+        files = [part for part in parts if part.get_param("name", header="content-disposition") == "file"]
         if len(files) != 1:
             raise ValueError("Choose one DOCX file")
         filename = files[0].get_filename() or "uploaded.docx"
         if not filename.lower().endswith(".docx"):
             raise ValueError("DOCX only")
+        if with_fields:
+            fields = {}
+            for part in parts:
+                name = part.get_param("name", header="content-disposition")
+                if name != "file":
+                    if name in fields or name not in {"reference_id", "reviewer", "rationale"}:
+                        raise ValueError("Unknown or repeated upload field")
+                    fields[name] = part.get_content()
+            return files[0].get_payload(decode=True), filename, fields
         return files[0].get_payload(decode=True), filename
 
     def do_GET(self):
@@ -1085,8 +1117,8 @@ class Handler(BaseHTTPRequestHandler):
                 data, filename = self._multipart_docx()
                 return self._json({"id": self.app.upload(data, filename)}, 201)
             if path == "/api/intakes":
-                data, filename = self._multipart_docx()
-                return self._json(self.app.intake(data, filename), 201)
+                data, filename, fields = self._multipart_docx(with_fields=True)
+                return self._json(self.app.intake(data, filename, fields.get("reference_id"), fields.get("reviewer"), fields.get("rationale")), 201)
             if path == "/api/reference-matches":
                 data, filename = self._multipart_docx()
                 return self._json(self.app.match_reference(data, filename), 201)

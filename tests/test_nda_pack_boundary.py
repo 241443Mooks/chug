@@ -33,9 +33,9 @@ class NDAPackBoundaryTests(unittest.TestCase):
             self.assertEqual(app.pack.id, "mutual_nda")
             self.assertEqual(app.detail("T03")["analysis"]["route"], "escalate")
             self.assertEqual(pack.analyses, 1)
-            unsupported = (ROOT / "dataset/incoming/T04-missing-no-licence.docx").read_bytes()
-            with self.assertRaisesRegex(ValueError, "missing clause headings"):
-                app.upload_reference(unsupported, "fictional-unsupported.docx")
+            # Alternate but structurally complete NDA headings are now supported.
+            alternate = (ROOT / "research/reference-library-v0.1/references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx").read_bytes()
+            self.assertEqual(app.upload_reference(alternate, "fictional-alternate.docx")["library_item"]["status"], "active")
             self.assertEqual(pack.validations, 1)
             self.assertEqual(app.detail("T01")["analysis"]["route"], "routine_candidate")
 
