@@ -121,3 +121,62 @@
 @media (prefers-color-scheme: dark) {
   #demo-banner { background: #233143; color: #e8eef5; }
 }
+
+/* Public snapshots use the viewport for the selected review instead of a permanent queue rail. */
+body.static-demo .queue-pane{display:none}
+body.static-demo .shell{display:block;min-height:calc(100vh - 72px)}
+body.static-demo .workspace{width:100%;max-width:1600px;margin:0 auto;padding:clamp(24px,4vw,56px)}
+body.static-demo .page-queue .workspace{max-width:1500px}
+body.static-demo .page-review .workspace{max-width:1600px}
+#demo-banner{display:flex;align-items:center;gap:14px;min-height:48px;padding:9px clamp(18px,4vw,56px);border-bottom:1px solid #d1d9df;background:#f0f4f7;color:#253447;font-size:13px;line-height:1.4}
+#demo-banner strong{white-space:nowrap}
+.queue-intro{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:0 0 24px;padding:0;width:100%;max-width:none}
+.queue-intro>div{flex:1;min-width:0}
+.queue-intro h1{font:700 clamp(28px,4vw,40px)/1.15 var(--serif);margin:5px 0 8px}
+.queue-intro p{margin:0;color:var(--muted);max-width:78ch}
+.queue-inline-filter{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px;white-space:nowrap}
+.queue-inline-filter select{min-width:180px;border:1px solid var(--line);border-radius:4px;padding:8px;background:#fff;color:var(--ink)}
+.public-queue{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.public-review-card{display:block;width:100%;min-width:0;padding:21px 23px;text-align:left;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s,transform .15s}
+.public-review-card:hover{border-color:#aab6c0;box-shadow:0 5px 18px #19253812;transform:translateY(-1px)}
+.public-review-card:focus-visible{outline:3px solid #6591bc;outline-offset:2px}
+.public-review-card .queue-item-top{align-items:center}
+.public-review-card .queue-item-title{font:700 20px/1.25 var(--serif);min-width:0}
+.public-review-card .queue-item-sub{margin-top:13px}
+.public-review-card .queue-reason{margin-top:9px}
+.open-review{display:flex;justify-content:space-between;margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--blue);font-size:13px;font-weight:700}
+.queue-human-note{margin:25px 0 0;color:var(--muted);font-size:13px}
+.full-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.comparison-heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:16px}
+.comparison-heading h3,.comparison-findings>h3{font:700 23px/1.2 var(--serif);margin:0 0 6px}
+.comparison-heading p{margin:0;color:var(--muted);font-size:13px;max-width:75ch}
+.comparison-heading>p{white-space:nowrap}
+.comparison-column{min-width:0;border:1px solid var(--line);border-radius:6px;background:#fff;padding:16px 19px}
+.comparison-column>h3{font:700 19px var(--serif);margin:0 0 12px}
+.comparison-column ol{list-style:none;padding:0;margin:0}
+.comparison-column li{border-top:1px solid #e9e9e5}
+.comparison-unit{display:block;width:100%;position:relative;padding:12px 10px;text-align:left;border:0;background:transparent;color:var(--ink);scroll-margin-top:18px}
+.comparison-unit.has-finding{background:#fff8f4;cursor:pointer}
+.comparison-unit.has-finding:hover{background:#fff0e9}
+.comparison-text{display:block;margin-top:5px;font:15px/1.55 var(--serif);overflow-wrap:anywhere}
+.comparison-anchor{color:var(--muted);font:10px/1.4 monospace;overflow-wrap:anywhere}
+.comparison-flag{display:inline-block;margin-top:7px;color:#8b3e2d;font-size:11px;font-weight:700}
+.comparison-findings{margin-top:30px}
+.comparison-findings .finding-list{margin-top:12px}
+.selected-reference{margin:0 0 20px;padding:17px 19px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.selected-reference h3{font:700 19px var(--serif);margin:0 0 7px}
+.selected-reference p{color:var(--muted);font-size:13px;margin:5px 0}
+.selected-reference .secondary{margin-top:10px}
+.read-only-action-note{margin:0 0 12px;padding:10px 12px;border-left:3px solid #8598a8;background:#eef3f7;color:#435268;font-size:13px}
+body.static-demo .tabs{gap:clamp(12px,2vw,26px);overflow:auto}
+@media(max-width:700px){
+  #demo-banner{display:block;padding:9px 18px}
+  #demo-banner strong{display:block;margin-bottom:2px}
+  body.static-demo .workspace{padding:24px 18px 44px}
+  .queue-intro{display:block}
+  .queue-inline-filter{margin-top:16px}
+  .public-queue,.full-comparison{grid-template-columns:1fr}
+  .public-review-card{padding:17px}
+  .comparison-heading{display:block}
+  .comparison-heading>p{margin-top:10px}
+}

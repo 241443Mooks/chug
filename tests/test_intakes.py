@@ -113,6 +113,27 @@ class IncomingIntakeTests(unittest.TestCase):
         self.assertEqual(restored["human_decision"]["status"], "recorded")
         self.assertEqual(restored["human_decision"]["last_decision"]["id"], decision["id"])
 
+    def test_approval_requires_and_records_independent_original_review(self):
+        source = b"not a DOCX package"
+        intake = self.app.intake(source, "blocked.docx")
+        digest = intake["incoming"]["sha256"]
+        with self.assertRaisesRegex(ValueError, "independently reviewed the exact incoming original"):
+            self.app.record_intake_decision(digest, "Fictional reviewer", "approve", "Reviewed", independent_original_reviewed=False)
+        decision = self.app.record_intake_decision(digest, "Fictional reviewer", "approve", "Reviewed the source despite blocked extraction", independent_original_reviewed=True)
+        self.assertTrue(decision["independent_original_reviewed"])
+        self.assertEqual(self.app.intake_detail(digest)["human_decision"]["status"], "recorded")
+
+    def test_saved_comparison_reports_reference_source_unavailable_after_removal(self):
+        standard = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
+        self.app.upload_reference(standard, "fictional-nda-standard.docx")
+        incoming = changed_docx(standard, b"five years", b"seven years")
+        result = self.app.intake(incoming, "new-fictional-nda.docx")
+        reference_path = self.app.references[result["reference"]["sha256"]]["path"]
+        reference_path.unlink()
+        restored = self.app.intake_detail(result["incoming"]["sha256"])
+        self.assertEqual(restored["comparison"]["status"], "analysed")
+        self.assertEqual(restored["source_integrity"]["reference"], "unavailable")
+
     def test_ambiguous_no_match_and_corrupt_uploads_remain_visible(self):
         nda = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
         no_match = self.app.intake(nda, "unmatched-fictional-nda.docx")

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 
@@ -18,7 +18,7 @@ function harness(items,hostname='localhost'){
   const location={hash:'#home',hostname};
   const storage=new Map();
   const context=vm.createContext({
-    document:{getElementById:node,querySelectorAll:()=>[],addEventListener:()=>{},title:''},
+    document:{getElementById:node,querySelectorAll:()=>[],addEventListener:()=>{},body:{classList:{add:()=>{}}},title:''},
     location,
     sessionStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
     window:{history:{pushState:(_state,_title,hash)=>{location.hash=hash},replaceState:(_state,_title,hash)=>{location.hash=hash}},addEventListener:()=>{}},
@@ -183,6 +183,67 @@ test('public Cloudflare hostname reads the static queue directly and blocks writ
   ]);
 });
 
+test('slash-prefixed public review deep links resolve the selected review and tab',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.location.hash='#/review/T03/overview';
+  assert.deepEqual({...h.run('route()')},{page:'review',id:'T03',tab:'overview',anchor:null});
+  h.location.hash='#/review/T05/comparison';
+  assert.deepEqual({...h.run('route()')},{page:'review',id:'T05',tab:'comparison',anchor:null});
+});
+
+test('public queue renders every precomputed review as an open-review button',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.run('state.staticDemo=true;state.queue='+JSON.stringify(items));
+  const html=h.run('queueView()');
+  assert.equal((html.match(/class="public-review-card"/g)||[]).length,items.length);
+  for(const item of items)assert.match(html,new RegExp(`data-id="${item.id}"`));
+  assert.match(html,/Every route needs a human decision/);
+  assert.match(html,/public-filter/);
+});
+
+test('public filter state is transient and is not written to session storage',async()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.run('state.queue='+JSON.stringify(items));
+  await h.run("navigate('queue','escalate')");
+  assert.equal(h.storage.has('chug.queueFilter'),false);
+  assert.equal(h.run('state.filter'),'escalate');
+});
+
+test('public Start reviewing does not persist the chosen category',async()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.run('state.queue='+JSON.stringify(items)+';state.staticDemo=true;state.page="home";select=async id=>id');
+  assert.equal(await h.run('startReviewing()'),'T03');
+  assert.equal(h.storage.has('chug.queueFilter'),false);
+});
+
+test('full comparison exposes all exported wording and links finding passages',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.run('state.detail='+JSON.stringify(falcon));
+  const html=h.run('comparisonView(state.detail)');
+  assert.match(html,/Full wording comparison/);
+  assert.match(html,/Applicable reference/);
+  assert.match(html,/data-finding-index=/);
+  assert.match(html,new RegExp(`${falcon.document.units.length} incoming passages`));
+  assert.match(html,new RegExp(`${falcon.reference.units.length} reference passages`));
+  for(const unit of falcon.document.units)assert.ok(html.includes(unit.text),`incoming wording missing: ${unit.anchor}`);
+  for(const unit of falcon.reference.units)assert.ok(html.includes(unit.text),`reference wording missing: ${unit.anchor}`);
+});
+
+test('every exported incoming review has inspectable incoming and reference wording',()=>{
+  const ids=readdirSync(new URL('../web/demo-data/contracts/',import.meta.url)).filter(name=>/^T\d+\.json$/.test(name));
+  assert.equal(ids.length,6);
+  for(const name of ids){
+    const detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/'+name,import.meta.url),'utf8'));
+    const h=harness(items,'chug.smooks.co.uk');
+    h.run('state.detail='+JSON.stringify(detail));
+    const html=h.run('comparisonView(state.detail)');
+    assert.match(html,/Incoming contract/);
+    assert.match(html,/Applicable reference/);
+    for(const unit of detail.document.units)assert.ok(html.includes(unit.text),`${name} omitted ${unit.anchor}`);
+    for(const unit of detail.reference.units)assert.ok(html.includes(unit.text),`${name} omitted reference ${unit.anchor}`);
+  }
+});
+
 test('local Python host keeps the interactive API enabled',async()=>{
   const h=harness(items,'127.0.0.1');
   const calls=[];
@@ -272,12 +333,20 @@ test('new intake detail shows a provisional comparison with source anchors and t
   assert.match(complete,/Download exact incoming DOCX/);
   assert.match(complete,/Record your review decision/);
   assert.match(complete,/Confirm reference and compare/);
+  assert.match(complete,/independently inspect the exact incoming original/);
+  assert.match(complete,/independent_original_reviewed/);
+  assert.match(source,/reviewed\.required=decision\.value==='approve'/);
   h.run('state.intake='+JSON.stringify({document:{filename:'Unmatched.docx',units:[]},incoming:{sha256:'pending'},family:'customer_order',status:'awaiting_reference',route:'review_required',reason:'A reviewer must confirm the reference.',extraction:{status:'complete'},matching:{proposal:{reason:'No suitable match.'}},comparison:{status:'not_run',reason:'Explicit confirmation is required.'},original_url:'/api/intakes/pending/original'}));
   const pending=h.run('intakeView(state.intake)');
   assert.match(pending,/Comparison not run/);
+  assert.match(pending,/independently inspect the exact incoming original/);
   assert.match(pending,/Explicit confirmation is required/);
   assert.match(pending,/Record your review decision/);
   assert.doesNotMatch(pending,/Looks routine|Approved/);
+  h.run('state.intake='+JSON.stringify({document:{filename:'Prior review.docx',units:[]},incoming:{sha256:'old'},family:'nda',status:'analysed_needs_review',route:'review_required',reason:'Saved comparison.',extraction:{status:'complete'},source_integrity:{incoming:'verified',reference:'unavailable'},matching:{proposal:{reason:'Previously selected.'}},comparison:{status:'analysed',findings:[]},original_url:'/api/intakes/old/original'}));
+  assert.match(h.run('intakeView(state.intake)'),/Reference source unavailable/);
+  h.run('state.intake.source_integrity.reference="not_linked"');
+  assert.doesNotMatch(h.run('intakeView(state.intake)'),/Reference source not_linked/);
 });
 
 test('public reference page keeps its standard upload control hidden',()=>{
@@ -286,4 +355,14 @@ test('public reference page keeps its standard upload control hidden',()=>{
   h.context.document.querySelectorAll=selector=>selector.startsWith('.upload-button')?[uploadControl]:[];
   h.run('applyStaticDemo()');
   assert.equal(uploadControl.hidden,true);
+});
+
+test('selected reference view preserves source identity and avoids an approval claim',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  h.run('state.detail='+JSON.stringify(falcon));
+  const html=h.run('referenceTextView(state.detail)');
+  assert.match(html,/Reference used for this review/);
+  assert.match(html,/bundled synthetic mutual NDA baseline bound to this precomputed review/);
+  assert.match(html,new RegExp(falcon.reference.sha256));
+  assert.match(html,/do not establish current organisational approval/);
 });

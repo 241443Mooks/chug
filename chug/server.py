@@ -363,10 +363,20 @@ class App:
             record["route"] = "review_required"
             record["reason"] = "Reference applicability was confirmed by a reviewer; comparison is available for human review."
         reference_sha256 = record.get("reference_confirmation", {}).get("sha256") or record.get("reference", {}).get("sha256")
+        reference_id = record.get("reference_confirmation", {}).get("reference_id") or record.get("reference", {}).get("reference_id")
+        reference_integrity = "not_linked"
+        if reference_id and reference_id in self.reference_library:
+            reference_integrity = self._library_source_integrity(self.reference_library[reference_id])
+        elif reference_sha256 and reference_sha256 in self.references:
+            reference_item = self.references[reference_sha256]
+            try:
+                reference_integrity = "verified" if hashlib.sha256(reference_item["path"].read_bytes()).hexdigest() == reference_sha256 else "mismatch"
+            except OSError:
+                reference_integrity = "unavailable"
         decisions = [event for event in self.ledger.all(digest) if event.get("reference_sha256") == reference_sha256]
         if decisions:
             record["human_decision"] = {"status": "recorded", "required": True, "outcome": decisions[-1]["decision"], "events": len(decisions), "last_decision": decisions[-1]}
-        return {**record, "id": "I-" + digest[:10], "document": item["document"], "original_url": "/api/intakes/" + digest + "/original"}
+        return {**record, "id": "I-" + digest[:10], "document": item["document"], "source_integrity": {"incoming": "verified", "reference": reference_integrity}, "original_url": "/api/intakes/" + digest + "/original"}
 
     def confirm_intake_reference(self, digest, reference_id, reference_sha256, reviewer, rationale):
         detail = self.intake_detail(digest)
@@ -405,8 +415,10 @@ class App:
         event = self.intake_confirmations.append(digest, detail["incoming"]["filename"], reference_id, reference_sha256, reviewer, rationale, comparison, analysis)
         return self.intake_detail(digest)
 
-    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None):
+    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None, independent_original_reviewed=False):
         detail = self.intake_detail(digest)
+        if decision == "approve" and independent_original_reviewed is not True:
+            raise ValueError("Before recording approval, confirm that you independently reviewed the exact incoming original document")
         findings = list((detail.get("analysis") or {}).get("findings", [])) or list(detail.get("comparison", {}).get("findings", []))
         observations = detail.get("comparison", {}).get("observations", [])
         findings.extend(observations)
@@ -421,7 +433,7 @@ class App:
             for passage in incoming:
                 sources.append({"finding_id": finding_id, "anchor": passage["anchor"], "text": passage["text"]})
         reference_sha256 = detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")
-        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256)
+        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256, independent_original_reviewed)
 
     def queue(self):
         latest = {}
@@ -1089,7 +1101,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.app.confirm_intake_reference(reference_confirmation.group(1), body.get("reference_id"), body.get("reference_sha256"), body.get("reviewer", ""), body.get("rationale", "")), 201)
             intake_decision = re.fullmatch(r"/api/intakes/([0-9a-f]{64})/decisions", path)
             if intake_decision:
-                return self._json(self.app.record_intake_decision(intake_decision.group(1), body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), body.get("conditions", ""), body.get("finding_ids", [])), 201)
+                return self._json(self.app.record_intake_decision(intake_decision.group(1), body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), body.get("conditions", ""), body.get("finding_ids", []), body.get("independent_original_reviewed", False)), 201)
             if path == "/api/reference/select":
                 return self._json(self.app.select_reference(body.get("sha256")))
             reference_status = re.fullmatch(r"/api/reference-library/([A-Za-z0-9_-]+)/status", path)
