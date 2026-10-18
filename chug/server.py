@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -579,13 +580,25 @@ class Handler(BaseHTTPRequestHandler):
         return self._error(404, "Not found")
 
 
+def default_state_dir(workspace: Path | None = None) -> Path:
+    """Preserve existing local decisions when the default folder name changes."""
+    root = Path.cwd() if workspace is None else workspace
+    current = root / ".chug-data"
+    legacy = root / ".chugchug-data"  # Previous name, supported for migration only.
+    if legacy.is_dir() and not current.exists():
+        shutil.copytree(legacy, current)
+        print("Existing review state copied to .chug-data (original retained as backup).", flush=True)
+    return current
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--state-dir", type=Path, default=Path(".chug-data"))
+    parser.add_argument("--state-dir", type=Path, default=None)
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    Handler.app = App(root, args.state_dir.resolve())
+    state_dir = args.state_dir if args.state_dir is not None else default_state_dir()
+    Handler.app = App(root, state_dir.resolve())
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print("Chug synthetic review: http://127.0.0.1:%d" % args.port, flush=True)
     server.serve_forever()
