@@ -253,6 +253,19 @@ class JourneyTests(unittest.TestCase):
             self.assertEqual(len(persisted.detail('T05')['contract_actions']), 1)
             self.assertEqual(persisted.queue()[next(i for i,x in enumerate(persisted.queue()) if x['id']=='T05')]['review_state'], 'flagged')
 
+    def test_reflag_after_human_acceptance_returns_contract_to_pending_queue(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            first = app.record_contract_action('T01', 'flag_for_review', 'Reviewer', 'Ask legal to look again.')
+            app.record_contract_action('T01', 'accept_contract', 'Reviewer',
+                                       'I independently inspected the original agreement.', True)
+            self.assertEqual(app.detail('T01')['review_state'], 'decided')
+            second = app.record_contract_action('T01', 'flag_for_review', 'Reviewer', 'Ask legal to look again.')
+            self.assertNotEqual(first['id'], second['id'])
+            reloaded = App(ROOT, Path(temp))
+            self.assertEqual(reloaded.detail('T01')['review_state'], 'flagged')
+            self.assertIsNone(next(row for row in reloaded.queue() if row['id'] == 'T01')['latest_decision'])
+
     def test_unassessed_and_needs_further_review_require_explanation_and_acknowledgement(self):
         with tempfile.TemporaryDirectory() as temp:
             app = App(ROOT, Path(temp))
