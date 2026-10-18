@@ -129,3 +129,28 @@ test('static hosting falls back to synthetic snapshot and refuses writes',async(
   await assert.rejects(h.run("api('/api/decisions',{method:'POST'})"),/Read-only public demo/);
   assert.deepEqual(calls,['/api/queue','/demo-data/queue.json','/demo-data/contracts/T01.json']);
 });
+
+test('public demo handles empty JSON responses from a static Worker without a Python API',async()=>{
+  const h=harness(items);
+  const calls=[];
+  h.context.fetch=async url=>{
+    calls.push(url);
+    if(url==='/api/queue')return {ok:true,status:200,headers:{get:()=>null},json:async()=>{throw new SyntaxError('Unexpected end of JSON input')}};
+    if(url==='/demo-data/queue.json')return {ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>({items})};
+    throw new Error('Unexpected fetch: '+url);
+  };
+  const snapshot=await h.run("api('/api/queue')");
+  assert.equal(snapshot.items.length,4);
+  assert.equal(h.run('state.staticDemo'),true);
+  assert.deepEqual(calls,['/api/queue','/demo-data/queue.json']);
+});
+
+test('real API errors are not silently hidden behind the public snapshot',async()=>{
+  const h=harness(items);
+  h.context.fetch=async url=>{
+    if(url==='/api/queue')return {ok:false,status:500,headers:{get:()=> 'application/json'},json:async()=>{throw new SyntaxError('Unexpected end of JSON input')}};
+    throw new Error('Unexpected public snapshot fallback: '+url);
+  };
+  await assert.rejects(h.run("api('/api/queue')"),/Invalid or empty JSON response/);
+  assert.equal(h.run('state.staticDemo'),false);
+});
