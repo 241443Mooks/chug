@@ -12,16 +12,16 @@
 <body>
   <header class="masthead">
     <div class="brand">Chug<span class="brand-divider"></span><span class="brand-subtitle">Contract review</span></div>
-    <nav class="main-nav" aria-label="Main navigation"><button type="button" data-page="home">Home</button><button type="button" data-page="queue">Review queue</button><button type="button" data-page="reference">Reference</button><button type="button" data-page="help">Help</button><a class="nav-link" href="/decision-log.html">Decision log</a></nav>
+    <nav class="main-nav" aria-label="Main navigation"><button type="button" data-page="home">Home</button><button type="button" data-page="queue">Review queue</button><button type="button" data-page="reference">References</button><button type="button" data-page="help">Help</button><a class="nav-link" href="/decision-log.html">Decision log</a></nav>
   </header>
   <div class="shell" id="shell">
     <aside class="queue-pane" aria-label="Review queue">
       <div class="queue-heading"><div><h1>Review queue</h1><p id="queue-count">Loading contracts…</p></div><button class="upload-button" id="upload-trigger" type="button">Add DOCX</button><input id="upload" type="file" accept=".docx" hidden>
       <div class="queue-filter"><label for="filter">Show</label><select id="filter"><option value="all">All contracts</option><option value="escalate">Needs closer review</option><option value="review_required">Needs judgement</option><option value="routine_candidate">Looks routine</option><option value="blocked_extraction">Analysis blocked</option></select></div>
       <nav id="queue" class="queue-list" aria-label="Contracts"></nav>
-      <p class="queue-foot">Synthetic demonstration · Every route needs a human decision.</p>
+      <p class="queue-foot">All contracts are fictional. A person must make the final decision.</p>
     </aside>
-    <main id="workspace" class="workspace" aria-live="polite"><div class="loading">Opening review workspace…</div></main>
+    <main id="workspace" class="workspace" aria-live="polite"><div class="loading">Loading Chug…</div></main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
 </body>
