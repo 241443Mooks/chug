@@ -34,3 +34,5 @@ Automated checks do not establish legal correctness, user comprehension or creat
 - The private NDA screen exposes Request amendment, Reject and Escalate as secondary detailed actions.
 - Regression tests cover flags, restarts, unresolved-finding acceptance and historical flagged records.
 - These code changes still require GitHub CI and owner browser, mobile and accessibility review. No deployment was performed.
+
+- Acceptance records also retain the explicit unresolved-findings acknowledgement. Existing detailed approval API paths are guarded; historical events remain unaltered.
