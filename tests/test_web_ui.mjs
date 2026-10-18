@@ -151,7 +151,7 @@ test('real API errors are not silently hidden behind the public snapshot',async(
     if(url==='/api/queue')return {ok:false,status:500,headers:{get:()=> 'application/json'},json:async()=>{throw new SyntaxError('Unexpected end of JSON input')}};
     throw new Error('Unexpected public snapshot fallback: '+url);
   };
-  await assert.rejects(h.run("api('/api/queue')"),/Invalid or empty JSON response/);
+  await assert.rejects(h.run("api('/api/queue')"),/Chug could not read the data for this page/);
   assert.equal(h.run('state.staticDemo'),false);
 });
 
@@ -197,7 +197,8 @@ test('public queue renders every precomputed review as an open-review button',()
   const html=h.run('queueView()');
   assert.equal((html.match(/class="public-review-card"/g)||[]).length,items.length);
   for(const item of items)assert.match(html,new RegExp(`data-id="${item.id}"`));
-  assert.match(html,/Every route needs a human decision/);
+  assert.match(html,/A person must make each decision/);
+  assert.equal((html.match(/<option value="all"/g)||[]).length,1);
   assert.match(html,/public-filter/);
 });
 
@@ -265,7 +266,7 @@ test('reference page lists family and lifecycle status with detail, matching and
   h.run("state.referenceLibrary={references:[{reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',version:'1.0',source_integrity:'verified',sha256:'123'}],count:1}");
   h.run("state.referenceDetail={reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',kind:'uploaded_synthetic',version:'1.0',provenance:'local upload',original_filename:'order.docx',sha256:'123',source_integrity:'verified',variant:null,deployment:null,channel:null,jurisdiction:null,extraction:{status:'complete',passage_count:4,limitations:[]},original_url:'/api/reference-library/UP-123/original'}");
   const page=h.run('referenceView()');
-  assert.match(page,/Reference standards/);
+  assert.match(page,/Reference documents/);
   assert.match(page,/customer order · active/);
   assert.match(page,/data-reference-detail="UP-123"/);
   assert.match(page,/Fictional order · active/);
@@ -280,27 +281,27 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   h.run("state.reference={current:{filename:'bundled.docx',kind:'bundled',sha256:'base',coverage:{status:'complete'},source_integrity:'verified',units:[]},available:[]}");
   h.run("state.referenceLibrary={references:[{reference_id:'BASE-base',display_name:'Bundled mutual NDA',family:'nda',status:'legacy_nda_baseline',version:'bundled',provenance:'bundled_demo_baseline',source_integrity:'verified',sha256:'base'},{reference_id:'UP-order',display_name:'Fictional order',family:'customer_order',status:'active',version:'1.0',provenance:'locally_uploaded_synthetic_reference',source_integrity:'verified',sha256:'order'},{reference_id:'NDA-1',display_name:'Research NDA',family:'nda',status:'research_candidate',version:'0.1',provenance:'verified_research_catalogue',source_integrity:'verified',sha256:'research'}]}");
   const page=h.run('referenceView()');
-  assert.match(page,/family-aware library of fictional contract standards/);
-  assert.match(page,/Fictional Legal standards/);
+  assert.match(page,/This library shows the type, version and status/);
+  assert.match(page,/References added by Legal/);
   assert.match(page,/Fictional Legal upload/);
-  assert.match(page,/Legacy NDA comparison baseline/);
-  assert.match(page,/excluded from new applicability matching/);
-  assert.match(page,/Synthetic research catalogue · research candidates/);
+  assert.match(page,/Original NDA reference/);
+  assert.match(page,/will not suggest it for new contracts/);
+  assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/family-aware reference library/);
-  assert.match(h.run('helpView()'),/public demo is a static, read-only snapshot/);
+  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/public demo only shows fictional examples/);
 });
 
 test('public reference view is read-only and keeps standards separate from incoming examples',()=>{
   const h=harness(items,'chug.smooks.co.uk');
   h.run("state.research={references:Array.from({length:8},(_,i)=>({id:'R'+i,name:'Research standard '+i,family:'nda',version:'0.1',sha256:'hash'+i,download:'/research/'+i+'.docx'})),routine_clients:[{name:'Client example',family:'incoming',download:'/client.docx'}],challenge_cases:[{name:'Challenge example',family:'incoming',download:'/challenge.docx'}]}");
   const page=h.run('referenceView()');
-  assert.match(page,/static, read-only snapshot/);
-  assert.match(page,/Synthetic research catalogue · research candidates/);
-  assert.match(page,/8 fictional source specimens/);
-  assert.match(page,/Incoming example documents · not standards/);
-  assert.match(page,/routine-looking client examples/);
-  assert.match(page,/incoming challenge examples/);
+  assert.match(page,/You can view the files, but you cannot upload or compare new contracts here/);
+  assert.match(page,/Examples for testing — not reference documents/);
+  assert.match(page,/8 fictional examples/);
+  assert.match(page,/Example contracts — not references/);
+  assert.match(page,/client contract examples \(not checked\)/);
+  assert.match(page,/examples with possible problems \(not checked\)/);
   assert.doesNotMatch(page,/id="reference-upload"|id="match-upload"|data-use-reference|data-select-reference/);
   assert.doesNotMatch(page,/future work \(#21\)|live multi-family comparison is available/);
 });
@@ -338,11 +339,19 @@ test('new intake detail shows a provisional comparison with source anchors and t
   assert.match(source,/reviewed\.required=decision\.value==='approve'/);
   h.run('state.intake='+JSON.stringify({document:{filename:'Unmatched.docx',units:[]},incoming:{sha256:'pending'},family:'customer_order',status:'awaiting_reference',route:'review_required',reason:'A reviewer must confirm the reference.',extraction:{status:'complete'},matching:{proposal:{reason:'No suitable match.'}},comparison:{status:'not_run',reason:'Explicit confirmation is required.'},original_url:'/api/intakes/pending/original'}));
   const pending=h.run('intakeView(state.intake)');
+  assert.match(pending,/Analysis incomplete · no quick-review result/);
+  assert.match(pending,/Extraction: complete\. Comparison: not_run/);
   assert.match(pending,/Comparison not run/);
   assert.match(pending,/independently inspect the exact incoming original/);
   assert.match(pending,/Explicit confirmation is required/);
   assert.match(pending,/Record your review decision/);
   assert.doesNotMatch(pending,/Looks routine|Approved/);
+  h.run('state.intake='+JSON.stringify({document:{filename:'Corrupted.docx',units:[]},incoming:{sha256:'blocked'},family:null,status:'blocked_extraction',route:'blocked_extraction',reason:'The DOCX could not be read.',extraction:{status:'blocked'},matching:{proposal:{reason:'Extraction is incomplete.'}},comparison:{status:'not_run',reason:'Extraction is incomplete; comparison was not performed.'},original_url:'/api/intakes/blocked/original'}));
+  const blocked=h.run('intakeView(state.intake)');
+  assert.match(blocked,/Analysis incomplete · no quick-review result/);
+  assert.match(blocked,/Extraction: blocked\. Comparison: not_run/);
+  assert.match(blocked,/role="alert"/);
+  assert.ok(blocked.indexOf('Analysis incomplete')<blocked.indexOf('Record your review decision'));
   h.run('state.intake='+JSON.stringify({document:{filename:'Prior review.docx',units:[]},incoming:{sha256:'old'},family:'nda',status:'analysed_needs_review',route:'review_required',reason:'Saved comparison.',extraction:{status:'complete'},source_integrity:{incoming:'verified',reference:'unavailable'},matching:{proposal:{reason:'Previously selected.'}},comparison:{status:'analysed',findings:[]},original_url:'/api/intakes/old/original'}));
   assert.match(h.run('intakeView(state.intake)'),/Reference source unavailable/);
   h.run('state.intake.source_integrity.reference="not_linked"');
@@ -365,4 +374,22 @@ test('selected reference view preserves source identity and avoids an approval c
   assert.match(html,/bundled synthetic mutual NDA baseline bound to this precomputed review/);
   assert.match(html,new RegExp(falcon.reference.sha256));
   assert.match(html,/do not establish current organisational approval/);
+});
+
+
+test('public pages use clear tasks and keep human decision limits visible',()=>{
+  const h=harness(items,'chug.smooks.co.uk');
+  const home=h.run('homeView()');
+  const queue=h.run('queueView()');
+  const help=h.run('helpView()');
+  assert.match(home,/Review a contract/);
+  assert.match(home,/You decide what happens next/);
+  assert.match(queue,/These labels help you choose what to check/);
+  assert.match(help,/Open the review queue/);
+  assert.match(help,/You cannot save a decision on this public site/);
+  assert.match(help,/A past decision does not approve a new contract/);
+  assert.match(help,/AI cannot approve a contract/);
+  const history=readFileSync(new URL('../web/decision-log.html',import.meta.url),'utf8');
+  assert.match(history,/These decisions are made up/);
+  assert.match(history,/Do not use these examples as approval/);
 });
