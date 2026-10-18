@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -10,7 +13,7 @@ from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urlsplit
 
 from .ai import AIService, AIUnavailable
 from .document import extract
@@ -382,6 +385,50 @@ class App:
 
 class Handler(BaseHTTPRequestHandler):
     app: App
+    server_version = "ChugChug"
+    sys_version = ""
+    online_mode = False
+    access_username = ""
+    access_password = ""
+    public_origin = ""
+
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'")
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def _authorised(self):
+        if not self.online_mode:
+            return True
+        value = self.headers.get("Authorization", "")
+        scheme, separator, token = value.partition(" ")
+        try:
+            supplied = base64.b64decode(token, validate=True) if separator and scheme.lower() == "basic" else b""
+        except (ValueError, binascii.Error):
+            supplied = b""
+        username, colon, password = supplied.partition(b":")
+        valid_user = hmac.compare_digest(username, self.access_username.encode("utf-8"))
+        valid_password = hmac.compare_digest(password, self.access_password.encode("utf-8"))
+        if colon and valid_user and valid_password:
+            return True
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="ChugChug private demo", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Authentication required\n")
+        return False
+
+    def _same_origin(self):
+        if not self.online_mode:
+            return True
+        origin = self.headers.get("Origin", "")
+        if origin == self.public_origin:
+            return True
+        self._error(403, "Request origin is not allowed")
+        return False
 
     def log_message(self, fmt, *args):
         # Do not log submitted contract text, reviewer rationales or keys.
@@ -421,6 +468,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
+        if path == "/healthz":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            return self.wfile.write(b"ok\n")
+        if not self._authorised():
+            return
         if path == "/api/queue":
             try:
                 return self._json({"items": self.app.queue()})
@@ -505,6 +559,10 @@ class Handler(BaseHTTPRequestHandler):
         return self._error(404, "Not found")
 
     def do_POST(self):
+        if not self._authorised():
+            return
+        if not self._same_origin():
+            return
         path = urlparse(self.path).path
         try:
             if path == "/api/upload":
@@ -578,16 +636,47 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, str(exc))
         return self._error(404, "Not found")
 
+    def handle_expect_100(self):
+        if not self._authorised() or not self._same_origin():
+            return False
+        return super().handle_expect_100()
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--state-dir", type=Path, default=Path(".chugchug-data"))
+    online_mode = os.environ.get("CHUGCHUG_ONLINE", "").strip() == "1"
+    default_host = "0.0.0.0" if online_mode else "127.0.0.1"
+    parser.add_argument("--host", default=os.environ.get("CHUGCHUG_HOST", default_host))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8765")))
+    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("CHUGCHUG_STATE_DIR", ".chugchug-data")))
     args = parser.parse_args()
+    if online_mode:
+        username = os.environ.get("CHUGCHUG_ACCESS_USERNAME", "")
+        password = os.environ.get("CHUGCHUG_ACCESS_PASSWORD", "")
+        origin = os.environ.get("CHUGCHUG_PUBLIC_ORIGIN", "")
+        parsed_origin = urlsplit(origin)
+        if not username or ":" in username or not password or len(password) < 24:
+            parser.error("online mode requires an access username and a password of at least 24 characters")
+        if parsed_origin.scheme != "https" or not parsed_origin.hostname or parsed_origin.username or parsed_origin.password or parsed_origin.path not in ("", "/") or parsed_origin.query or parsed_origin.fragment:
+            parser.error("online mode requires CHUGCHUG_PUBLIC_ORIGIN to be an HTTPS origin, such as https://review.example.com")
+        try:
+            origin_port = parsed_origin.port
+        except ValueError:
+            parser.error("CHUGCHUG_PUBLIC_ORIGIN contains an invalid port")
+        origin_host = parsed_origin.hostname.lower()
+        if ":" in origin_host:
+            origin_host = "[" + origin_host + "]"
+        public_origin = "https://" + origin_host + (":" + str(origin_port) if origin_port and origin_port != 443 else "")
+        Handler.online_mode = True
+        Handler.access_username = username
+        Handler.access_password = password
+        Handler.public_origin = public_origin
+        if args.host != "0.0.0.0":
+            parser.error("online mode must bind to the container interface; use --host 0.0.0.0")
     root = Path(__file__).resolve().parent.parent
     Handler.app = App(root, args.state_dir.resolve())
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("ChugChug synthetic review: http://127.0.0.1:%d" % args.port, flush=True)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print("ChugChug synthetic review listening on %s:%d" % (args.host, args.port), flush=True)
     server.serve_forever()
 
 

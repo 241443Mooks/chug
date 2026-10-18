@@ -62,6 +62,8 @@ What I want to explore next is how much useful organisational knowledge can accu
 
 For the working demonstration, technical details and limitations, see [START_HERE.md](START_HERE.md).
 
+For a private synthetic upload demo, see the [container deployment guide](docs/ONLINE_DEMO.md). This is separate from the existing public read-only website and is not hosted yet.
+
 ## Where I'm exploring next
 
 The next step is to work with a real team to understand what information already exists, how work flows through the organisation and what knowledge can be captured naturally along the way.

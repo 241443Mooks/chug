@@ -4,7 +4,7 @@
 
 The deployed static frontend requests /api/queue and /api/reference. When the site is published without the Python server, the host may return index.html to those URLs, causing a JSON parse error. This is a deployment mismatch, not missing NDA fixtures.
 
-**The public static option is read-only and uses synthetic documents only.** It is not the working reviewer/decision backend, a production deployment, or legal approval. Never expose the current Python server to the public Internet unchanged: it has local-demo trust assumptions, no authentication or production data separation, and supports writing review events and uploading files.
+**The public static option is read-only and uses synthetic documents only.** It is not the working reviewer/decision backend, a production deployment, or legal approval. The Python server now has a separately configured online mode for a private synthetic demo; use [ONLINE_DEMO.md](ONLINE_DEMO.md) and do not expose the default loopback/local mode.
 
 ## Build the website data
 
@@ -48,8 +48,8 @@ The experimental branch has a workflow to run validation, produce the snapshot, 
 7. Open `/decision-log.html`, filter on Falcon (T03), verify red flags and amended green examples are labelled as fictional, and follow its link back to the current review.
 8. Recheck at narrow viewport. Do not claim human creative or legal acceptance before it happens.
 
-## Full interactive service: a separate decision
+## Private interactive service
 
-A live reviewer session requires a **secure Python backend**, rather than static hosting. Before any Internet-accessible backend, define authentication, access boundaries, persistence/backups, CSRF/origin controls, HTTPS, rate limits, upload/content validation, and safeguards for real document handling. Avoid publishing review event APIs with unauthenticated write access. The existing offline server should remain loopback-only until this design is made deliberately.
+A live reviewer session requires a **secure Python backend**, rather than static hosting. The private synthetic demo deployment boundary is now implemented in `Dockerfile` and documented in [ONLINE_DEMO.md](ONLINE_DEMO.md): password authentication, same-origin write checks, HTTPS-origin configuration, persistent state path, and a single-instance limit. It still requires a separately configured container host, HTTPS domain, access secrets and durable volume. Keep the public static website read-only.
 
 Multi-family applicability suggestion and customer-order comparison are **not implemented** by this snapshot. Those belong to issue #21. Do not present the research fixtures as validated legal guidance or auto-approved matches.
