@@ -33,7 +33,7 @@ The export starts with a fresh empty ledger and exports **no reviewer names, upl
 
 Configure the static host's publish directory as `web/`. Ensure every file under `web/demo-data/` is included in the deployment; merely deploying `web/index.html`, `app.js` and `styles.css` is not sufficient.
 
-When the browser requests `/api/queue` and receives a non-JSON static fallback, Chug will load `/demo-data/queue.json` instead, display the read-only public notice and disable all write controls. Reference and individual review pages load snapshot JSON and link to exported original fictional DOCX files. If the host does not support this static fallback, add an appropriate rewrite to `/index.html` for SPA routes but do not rewrite `/demo-data/*` to HTML.
+When the browser requests `/api/queue` and receives a non-JSON static fallback, Chug will load `/demo-data/queue.json` instead, display a compact full-width read-only notice, and disable all write controls. The public review queue uses the full content width and every review card opens its exported snapshot. Reviews expose the complete incoming and applicable reference wording, with precomputed finding evidence, reference details, history and assurance views available through deep links. The static client rejects every non-GET request. Reference and individual review pages link to exported original fictional DOCX files. If the host does not support this static fallback, add an appropriate rewrite to `/index.html` for SPA routes but do not rewrite `/demo-data/*` to HTML.
 
 The experimental branch has a workflow to run validation, produce the snapshot, and commit generated files **to that feature branch** when Actions are enabled. If Actions are disabled, run the commands above before publishing. This does not automatically update the existing public deployment until the relevant PRs are accepted and the website is redeployed.
 
@@ -42,11 +42,12 @@ The experimental branch has a workflow to run validation, produce the snapshot, 
 1. `https://chug.smooks.co.uk/demo-data/queue.json` returns `application/json` and exactly six `items`.
 2. `/demo-data/reference.json` shows the bundled fictional reference.
 3. `/demo-data/research.json` lists 8 standards, 20 ordinary-looking client files, and 4 challenge documents, all flagged as research specimens.
-4. Home shows nonzero counts; open Falcon and inspect linked source passages. Reference shows the research specimens.
-5. Download a synthetic original DOCX from a review and the research library.
-6. Confirm the public read-only banner appears and no upload, decision, publication or AI action is offered.
-7. Open `/decision-log.html`, filter on Falcon (T03), verify red flags and amended green examples are labelled as fictional, and follow its link back to the current review.
-8. Recheck at narrow viewport. Do not claim human creative or legal acceptance before it happens.
+4. Open the review queue, activate any review card by mouse or keyboard, then inspect Review, Compare wording, Full document, Reference, Check coverage and Review history. A direct `#/review/T03/overview` URL must open T03.
+5. Compare wording shows every exported incoming and reference passage; finding-linked passages open their associated finding evidence. Reference shows the research specimens.
+6. Download a synthetic original DOCX from a review and the research library.
+7. Confirm the public read-only notice appears and no upload, decision, publication or AI action is offered.
+8. Open `/decision-log.html`, filter on Falcon (T03), verify red flags and amended green examples are labelled as fictional, and follow its link back to the current review.
+9. Recheck at narrow viewport. Do not claim human creative or legal acceptance before it happens.
 
 ## Full interactive service: a separate decision
 
