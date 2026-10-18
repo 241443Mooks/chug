@@ -428,13 +428,20 @@ class App:
         event = self.intake_confirmations.append(digest, detail["incoming"]["filename"], reference_id, reference_sha256, reviewer, rationale, comparison, analysis)
         return self.intake_detail(digest)
 
-    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None, independent_original_reviewed=False, contract_action=None):
+    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None, independent_original_reviewed=False, contract_action=None, unresolved_findings_acknowledged=False):
         detail = self.intake_detail(digest)
         if decision == "approve" and independent_original_reviewed is not True:
             raise ValueError("Before recording approval, confirm that you independently reviewed the exact incoming original document")
         findings = list((detail.get("analysis") or {}).get("findings", [])) or list(detail.get("comparison", {}).get("findings", []))
         observations = detail.get("comparison", {}).get("observations", [])
         findings.extend(observations)
+        if decision == "approve":
+            unresolved = [finding for finding in findings if
+                          detail["latest_finding_assessments"].get(finding.get("id"), {}).get("assessment")
+                          not in {"not_relevant", "acceptable"}]
+            if unresolved and (unresolved_findings_acknowledged is not True or
+                               not isinstance(rationale, str) or len(rationale.strip()) < 20):
+                raise ValueError("Acknowledge unresolved findings and explain acceptance before approval")
         by_id = {row.get("id"): row for row in findings}
         finding_ids = finding_ids or []
         if not isinstance(finding_ids, list) or any(item not in by_id for item in finding_ids):
@@ -446,7 +453,7 @@ class App:
             for passage in incoming:
                 sources.append({"finding_id": finding_id, "anchor": passage["anchor"], "text": passage["text"]})
         reference_sha256 = detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")
-        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256, independent_original_reviewed, contract_action)
+        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256, independent_original_reviewed, contract_action, unresolved_findings_acknowledged)
 
     def _review_records(self, sha256, reference_sha256, *, legacy=False):
         """Preserve historical ledger bytes while treating earlier mislabeled flags as pending."""
@@ -941,10 +948,12 @@ class App:
                 raise ValueError("Explain why you accept despite unresolved or unassessed findings")
         if document_id not in self.contracts:
             return self.record_intake_decision(digest, reviewer, "approve", rationale,
-                finding_ids=[], independent_original_reviewed=True, contract_action="accept_contract")
+                finding_ids=[], independent_original_reviewed=True, contract_action="accept_contract",
+                unresolved_findings_acknowledged=unresolved_findings_acknowledged)
         return self.ledger.append(source_sha256, filename, reviewer, "approve", rationale, [],
                                   reference_sha256=reference_sha256, independent_original_reviewed=True,
-                                  contract_action="accept_contract")
+                                  contract_action="accept_contract",
+                                  unresolved_findings_acknowledged=unresolved_findings_acknowledged)
 
     def upload(self, data, filename):
         if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
@@ -1260,7 +1269,16 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Unknown finding reference")
                 doc = detail["document"]
                 considered_sources = [{"finding_id": finding["id"], "anchor": source["anchor"], "text": source["text"]} for finding in detail["analysis"]["findings"] if finding["id"] in finding_ids for source in finding["sources"]]
-                event = self.app.ledger.append(doc["sha256"], doc["filename"], body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), finding_ids, body.get("conditions", ""), considered_sources, detail["reference"]["sha256"])
+                if body.get("decision") == "approve":
+                    if body.get("independent_original_reviewed") is not True:
+                        raise ValueError("Confirm independent review of the original before approval")
+                    unresolved = [finding for finding in detail["analysis"]["findings"]
+                                  if detail["latest_finding_assessments"].get(finding["id"], {}).get("assessment")
+                                  not in {"not_relevant", "acceptable"}]
+                    if unresolved and (body.get("unresolved_findings_acknowledged") is not True or
+                                       not isinstance(body.get("rationale"), str) or len(body["rationale"].strip()) < 20):
+                        raise ValueError("Acknowledge unresolved findings and explain acceptance")
+                event = self.app.ledger.append(doc["sha256"], doc["filename"], body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), finding_ids, body.get("conditions", ""), considered_sources, detail["reference"]["sha256"], independent_original_reviewed=body.get("independent_original_reviewed") is True, unresolved_findings_acknowledged=body.get("unresolved_findings_acknowledged") is True)
                 return self._json(event, 201)
             if path == "/api/precedents":
                 if body.get("role") != "demo_legal_reviewer" or body.get("acknowledged") is not True:
