@@ -13,8 +13,16 @@ async function readJson(url,options){
   const response=await fetch(url,options);
   const type=(response.headers?.get('content-type')||'application/json').toLowerCase();
   if(!type.includes('json')){const error=new Error('Expected JSON but received '+type+' from '+url);error.nonJson=true;throw error}
-  const data=await response.json();
-  if(!response.ok)throw new Error(data.error||'Request failed ('+response.status+')');
+  let data;
+  try{data=await response.json()}
+  catch(cause){
+    const error=new Error('Invalid or empty JSON response from '+url);
+    // Static hosting may return an empty 200 response for a missing Python API.
+    // Only fall back to bundled data for an otherwise successful API response.
+    error.nonJson=response.ok;
+    throw error;
+  }
+  if(!response.ok)throw new Error(data?.error||'Request failed ('+response.status+')');
   return data;
 }
 function staticJsonUrl(url){
