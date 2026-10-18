@@ -198,17 +198,31 @@ test('local Python host keeps the interactive API enabled',async()=>{
   assert.deepEqual(calls,['/api/queue','/api/decisions']);
 });
 
-test('reference page lists family, approval status and a detail action for the local library',()=>{
+test('reference page lists family and lifecycle status with detail, matching and original actions',()=>{
   const h=harness(items,'127.0.0.1');
   h.run("state.reference={current:{filename:'baseline.docx',kind:'bundled',sha256:'abc',coverage:{status:'complete'},source_integrity:'verified',units:[]},available:[]}");
-  h.run("state.referenceLibrary={references:[{reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'registered_for_evaluation',approval_status:'unapproved',version:'1.0',source_integrity:'verified',sha256:'123'}],count:1}");
-  h.run("state.referenceDetail={reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'registered_for_evaluation',approval_status:'unapproved',version:'1.0',provenance:'local upload',original_filename:'order.docx',sha256:'123',source_integrity:'verified',variant:null,deployment:null,channel:null,jurisdiction:null,extraction:{status:'complete',passage_count:4,limitations:[]},original_url:'/api/reference-library/UP-123/original'}");
+  h.run("state.referenceLibrary={references:[{reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',version:'1.0',source_integrity:'verified',sha256:'123'}],count:1}");
+  h.run("state.referenceDetail={reference_id:'UP-123',display_name:'Fictional order',family:'customer_order',status:'active',kind:'uploaded_synthetic',version:'1.0',provenance:'local upload',original_filename:'order.docx',sha256:'123',source_integrity:'verified',variant:null,deployment:null,channel:null,jurisdiction:null,extraction:{status:'complete',passage_count:4,limitations:[]},original_url:'/api/reference-library/UP-123/original'}");
   const page=h.run('referenceView()');
   assert.match(page,/Reference standards/);
-  assert.match(page,/customer order · registered for evaluation/);
+  assert.match(page,/customer order · active/);
   assert.match(page,/data-reference-detail="UP-123"/);
-  assert.match(page,/Fictional order · unapproved/);
+  assert.match(page,/Fictional order · active/);
   assert.match(page,/Download exact original DOCX/);
+  assert.match(page,/Mark Superseded/);
+  assert.match(page,/Mark Withdrawn/);
+  assert.match(page,/Check reference applicability/);
+});
+
+test('matching result exposes context, source identity, excluded candidates and human boundary',()=>{
+  const h=harness(items);
+  h.run('state.matchResult='+JSON.stringify({incoming:{filename:'incoming.docx',sha256:'abc'},assessed_at:'2026-10-18',original_url:'/incoming.docx',proposal:{status:'proposed',reason:'One context-compatible reference remains.',human_confirmation_required:true,comparison_allowed:false,proposal:{reference_id:'UP-123',display_name:'Fictional order',status:'active',version:'1.0',sha256:'123',reasons:[{dimension:'variant',value:'desktop_seats',evidence:[{anchor:'word/document.xml:p2',text:'Direct desktop order'}]}]},context:{dimensions:{channel:{state:'known',value:'direct',evidence:[]}}},excluded:[{display_name:'Old order',status:'withdrawn',reasons:['inactive standards are excluded from new matches']}]}}));
+  const result=h.run('matchResultView(state.matchResult)');
+  assert.match(result,/Fictional order/);
+  assert.match(result,/word\/document.xml:p2/);
+  assert.match(result,/withdrawn/);
+  assert.match(result,/Human decision required/);
+  assert.match(result,/Confirmation and comparison have not occurred/);
 });
 
 test('public reference page keeps its standard upload control hidden',()=>{

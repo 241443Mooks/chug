@@ -106,7 +106,7 @@ _RANK_STOP = {"a", "an", "and", "for", "in", "of", "or", "the", "to", "with", "b
 
 
 def _rank_by_scope(item, incoming_text):
-    scope_tokens = {token for token in re.findall(r"[a-z0-9]+", item["reference"]["scope"].casefold()) if token not in _RANK_STOP}
+    scope_tokens = {token for token in re.findall(r"[a-z0-9]+", (item["reference"].get("scope") or "").casefold()) if token not in _RANK_STOP}
     input_tokens = {token for token in re.findall(r"[a-z0-9]+", incoming_text.casefold()) if token not in _RANK_STOP}
     shared = sorted(scope_tokens & input_tokens)
     item["ranking"] = {"basis": "shared scope words after hard applicability exclusions", "shared_terms": shared, "score": len(shared)}
@@ -201,7 +201,8 @@ def uploaded_reference_metadata(document: dict, display_name: str, version: str 
     """Build immutable, source-linked metadata for a locally uploaded standard.
 
     Applicability facts are extracted from the source. Missing facts remain
-    explicit unknowns; an upload never implies organisational approval.
+    explicit unknowns. The local legal-team upload flow is the fictional
+    authorisation boundary for this synthetic prototype.
     """
     context = extract_context(document)
     dimensions = context.get("dimensions", {})
@@ -222,6 +223,11 @@ def uploaded_reference_metadata(document: dict, display_name: str, version: str 
         raise ValueError("Reference display name must be 1 to 120 characters")
     if not isinstance(version, str) or not version.strip() or len(version.strip()) > 40:
         raise ValueError("Reference version must be 1 to 40 characters")
+    variant_evidence = dimensions.get("variant", {}).get("evidence", [])
+    scope_evidence = variant_evidence or family_dimension.get("evidence", [])
+    scope_anchor = scope_evidence[0]["anchor"] if scope_evidence else None
+    units_by_anchor = {unit["anchor"]: unit for unit in document.get("units", [])}
+    scope = units_by_anchor.get(scope_anchor, {}).get("text")
     return {
         "reference_id": "UP-" + document["sha256"],
         "display_name": display_name.strip(),
@@ -232,21 +238,32 @@ def uploaded_reference_metadata(document: dict, display_name: str, version: str 
         "direction": fact("direction"),
         "purpose": fact("purpose"),
         "jurisdiction": fact("jurisdiction"),
+        "scope": scope,
+        "scope_anchor": scope_anchor,
         "applicability": {name: {"state": item.get("state", "unknown"), "value": item.get("value"), "evidence": item.get("evidence", [])} for name, item in dimensions.items()},
         "original_filename": document["filename"],
         "sha256": document["sha256"],
         "version": version.strip(),
-        "status": "registered_for_evaluation",
-        "approval_status": "unapproved",
+        "status": "active",
         "provenance": "locally_uploaded_synthetic_reference",
         "extraction": {"status": document["coverage"]["status"], "limitations": list(document["coverage"].get("issues", [])), "passage_count": len(document.get("units", [])), "parts": list(document["coverage"].get("parts", []))},
     }
 
 
-def propose_reference(document: dict, references: list[dict]) -> dict:
+def propose_reference(document: dict, references: list[dict], eligible_statuses: set[str] | None = None) -> dict:
     """Propose an exact-context candidate or abstain; never approve a baseline."""
     context = extract_context(document)
-    base = {"context": context, "proposal": None, "eligible": [], "excluded": [], "questions": [], "human_confirmation_required": True, "comparison_allowed": False}
+    inactive = []
+    eligible_references = []
+    for reference in references:
+        status = reference.get("status")
+        if status in {"superseded", "withdrawn"}:
+            inactive.append({"reference_id": reference.get("reference_id"), "display_name": reference.get("display_name"), "status": status, "reasons": ["inactive standards are excluded from new matches"]})
+        elif eligible_statuses is not None and status not in eligible_statuses:
+            inactive.append({"reference_id": reference.get("reference_id"), "display_name": reference.get("display_name"), "status": status, "reasons": ["research fixtures are not Active standards and are excluded from new matches"]})
+        else:
+            eligible_references.append(reference)
+    base = {"context": context, "proposal": None, "eligible": [], "excluded": inactive, "questions": [], "human_confirmation_required": True, "comparison_allowed": False}
     if context["status"] == "blocked_extraction":
         return {**base, "status": "blocked_extraction", "reason": "Document extraction is incomplete; applicability cannot be assessed."}
     if context["status"] == "ambiguous":
@@ -259,7 +276,7 @@ def propose_reference(document: dict, references: list[dict]) -> dict:
     required = ["family", "direction", "variant"] if family["value"] == "nda" else ["family", "deployment", "channel", "variant"]
     relevant = required + ["jurisdiction"]
     missing_required = list(required)
-    if family["value"] == "nda" and any(r.get("family") == "nda" and r.get("jurisdiction") for r in references):
+    if family["value"] == "nda" and any(r.get("family") == "nda" and r.get("jurisdiction") for r in eligible_references):
         missing_required.append("jurisdiction")
     missing = [name for name in missing_required if dims[name]["state"] != "known"]
     if missing:
@@ -272,8 +289,8 @@ def propose_reference(document: dict, references: list[dict]) -> dict:
         }
         return {**base, "status": "needs_context", "reason": "A required applicability fact is missing or ambiguous.", "questions": [questions[name] for name in missing]}
 
-    eligible, excluded = [], []
-    for reference in references:
+    eligible, excluded = [], list(inactive)
+    for reference in eligible_references:
         reasons = []
         mismatches = []
         for name in relevant:
@@ -281,6 +298,8 @@ def propose_reference(document: dict, references: list[dict]) -> dict:
             expected = reference.get(name)
             if name == "family" and expected is None:
                 mismatches.append(name)
+            elif name in required and expected is None:
+                mismatches.append("reference does not establish " + name)
             elif expected is not None and incoming["state"] == "known":
                 if incoming["value"] != expected:
                     mismatches.append(name)
@@ -316,7 +335,7 @@ def propose_reference(document: dict, references: list[dict]) -> dict:
     return {
         **base,
         "status": status,
-        "reason": "One context-compatible research candidate remains. Confirm its applicability before comparison.",
+        "reason": "One context-compatible reference remains. Confirm its applicability before comparison.",
         "proposal": _public_candidate(item),
         "alternatives": alternatives,
         "excluded": excluded,
@@ -340,7 +359,8 @@ def _public_candidate(item):
         "scope_evidence": {"anchor": scope_unit["anchor"], "text": scope_unit["text"]},
         "version": reference["version"],
         "sha256": reference["sha256"],
-        "demo_status": reference["demo_status"],
+        "status": reference.get("status", "research_candidate" if reference.get("demo_status") else "active"),
+        "demo_status": reference.get("demo_status"),
         "reasons": item["reasons"],
         "ranking": item["ranking"],
         "gaps": item["gaps"],
