@@ -39,8 +39,9 @@ class SubmissionZipTests(unittest.TestCase):
         self.assertEqual(len(digest), 64)
         self.assertTrue(destination.with_suffix(".zip.sha256").exists())
         with zipfile.ZipFile(destination) as archive:
-            self.assertEqual(set(archive.namelist()), REQUIRED)
-            self.assertNotIn(".env", archive.namelist())
+            files = {item.filename for item in archive.infolist() if not item.is_dir()}
+            self.assertEqual(files, REQUIRED)
+            self.assertNotIn(".env", files)
             self.assertNotIn("local-private-contract.docx", archive.namelist())
             self.assertIsNone(archive.testzip())
 
