@@ -53,7 +53,7 @@ The online demonstration does not save new decisions or accept document uploads.
 
 The interactive demonstration provides the fuller experience, including recording decisions and exploring how knowledge from one review can become useful in another.
 
-You'll need Python 3.9 or newer. No additional packages, account or AI subscription are required.
+Use Python 3.11 or 3.12 for the verified DOCX workflow. GitHub validation uses 3.11; the local setup was checked with 3.12. No additional Python packages, account or AI subscription are required for this workflow.
 
 From the downloaded project's main folder, run:
 
@@ -67,7 +67,7 @@ Open the following address in your browser:
 
 You can now explore the same fictional contracts, upload supported synthetic DOCX documents, record decisions and experiment with sharing and withdrawing previous decisions.
 
-For the new upload → matching → analysis → review queue flow, see [the Issue #8 walkthrough](docs/ISSUE_8_WALKTHROUGH.md).
+For the current automatic matching and human-review journey, follow [the five-case walkthrough](docs/OWNER_REVIEW.md). It creates exact and changed NDA/order examples plus an unresolved match in a separate local state folder. The basic server command above starts the six original examples; it does not seed those five new intakes. For manual upload steps, see [the intake walkthrough](docs/ISSUE_8_WALKTHROUGH.md).
 
 Your local demonstration data is stored on your computer. The application does not send contracts to an AI provider unless you deliberately configure and invoke the optional AI feature.
 
@@ -137,7 +137,7 @@ The contract-review demonstration is about more than comparing documents.
 
 It's an opportunity to explore how knowledge created through everyday work can become useful when a similar situation arises in the future.
 
-The interactive local version includes a small, fictional example of this process.
+An earlier local learning experiment and its automated tests explore this process. The current automatic-upload workflow records assessments and contract decisions; connecting those new reviews to reusable previous decisions is the separate next milestone (#10). The sequence below describes that learning experiment, not the five-case upload walkthrough.
 
 ### Capture — A decision is made
 
@@ -224,81 +224,17 @@ The people using a system should be able to understand it, challenge it and infl
 
 These considerations will need to be tested and developed with the people who would actually use Chug.
 
-## Explore the interactive learning cycle
+## Status of the learning cycle
 
-The local version of Chug lets you go beyond inspecting existing information. You can make fictional decisions, preserve their context and explore how they become useful during later work.
+The repository includes fictional learning cases L01–L03 and a legacy decision/publication experiment. Its source-bound capture, explicit publication, retrieval and withdrawal mechanisms have automated tests:
 
-This short exercise demonstrates the process.
+```sh
+python3 -m unittest tests.test_learning_loop -v
+```
 
-### 1. Review a contract
+The current automatic-upload journey uses a different intake path. Its human assessments and contract actions persist, but the earlier L01/L02 instructions to upload, publish and retrieve through the browser are not a verified journey for that path. Connecting new uploaded reviews to relevant previous decisions is tracked as the next milestone in issue #10.
 
-Start the local application using the instructions above.
-
-Choose **Add DOCX** and upload `dataset/learning/L01-audit-retention.docx`.
-
-Open the Maple Metrics review.
-
-The contract contains a change concerning the retention of information after an agreement ends.
-
-Inspect the original wording, the reference agreement and the concerns Chug has identified.
-
-### 2. Record a decision
-
-Choose **Record decision**.
-
-Select the findings you've considered, enter a fictional reviewer name, choose an outcome and record your reasoning.
-
-For this example, consider whether retaining records for a specific regulatory obligation, with access restricted to compliance purposes, might be acceptable.
-
-The decision is preserved with its supporting evidence.
-
-**Recording a decision does not automatically make it approved guidance for future work.**
-
-### 3. Share the experience
-
-Open the recorded decision in **Review history**.
-
-Choose **Share this decision as a precedent**.
-
-Confirm the source passage and record the context, conditions and limitations that someone would need to understand before considering this decision again.
-
-Publication is deliberate, rather than automatic. The demonstration uses a self-declared reviewer role; it does not verify real organisational authority.
-
-### 4. See what happens next
-
-Upload `dataset/learning/L02-analytics-retention.docx` and open Harbour Analytics.
-
-Chug can now retrieve the earlier decision as potentially relevant historical context.
-
-But there's an important difference.
-
-The earlier review concerned regulatory record retention. The new contract permits information to be retained for commercial analytics.
-
-Explore how Chug presents that earlier experience without assuming the same decision applies.
-
-### 5. Withdraw the precedent
-
-Return to Maple Metrics and withdraw the published decision from its history.
-
-Revisit Harbour Analytics.
-
-The withdrawn decision should no longer appear as active published precedent, while the original publication and withdrawal remain recorded in the demonstration history.
-
-### Explore further
-
-You can also experiment with **Improve this comparison** to record a correction to how wording has been compared.
-
-Corrections are separate from legal decisions. They can be deliberately shared for future retrieval, with their original context and limitations preserved.
-
-The additional fictional contract `dataset/learning/L03-regulatory-records.docx` provides an opportunity to compare genuinely related wording with a misleadingly similar example.
-
-**What this demonstrates**
-
-A practical workflow can preserve more than its immediate outcome.
-
-It can create a source-linked record of what happened, why a decision was made and under what conditions that experience might be useful again.
-
-The experiment demonstrates a technical mechanism for knowledge reuse. It does not establish legal correctness, improved productivity or an automatically learning AI system.
+For the current demonstration, use [the five-case walkthrough](docs/OWNER_REVIEW.md). Treat the wider learning cycle as an experiment and future integration goal, not as completed acceptance of the new upload workflow.
 
 ## Technical reference and verification
 
