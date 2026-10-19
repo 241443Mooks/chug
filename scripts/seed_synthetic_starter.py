@@ -1,4 +1,4 @@
-"""Populate an isolated local Chug workspace with four fictional review cases.
+"""Populate an isolated local Chug workspace with five fictional review cases (including an abstention).
 
 Run from the repository root:
     python3 scripts/seed_synthetic_starter.py --state-dir /tmp/chug-starter
@@ -51,6 +51,24 @@ def seed(state_dir: Path) -> list[dict]:
                 "differences": len(detail["comparison"].get("findings", detail["comparison"].get("observations", []))),
                 "human_decision": detail["human_decision"]["status"],
             })
+    # The fifth case proves that a plausible but inapplicable contract is not
+    # silently forced onto either Active reference. It is a real queued intake.
+    ambiguous = LIBRARY / "incoming-tests/Incoming - Ambiguous Reseller Cloud Scan Purchase.docx"
+    detail = app.intake(ambiguous.read_bytes(), ambiguous.name)
+    results.append({
+        "example": "ambiguous purchase",
+        "incoming": detail["incoming"]["filename"],
+        "incoming_sha256": detail["incoming"]["sha256"],
+        "family": detail["family"],
+        "selected_reference_id": detail["reference"]["reference_id"],
+        "selected_reference_sha256": detail["reference"]["sha256"],
+        "expected_reference_id": None,
+        "matching_status": detail["matching"]["proposal"]["status"],
+        "comparison_status": detail["comparison"]["status"],
+        "differences": len(detail["comparison"].get("findings", detail["comparison"].get("observations", []))),
+        "human_decision": detail["human_decision"]["status"],
+        "reason": detail["reason"],
+    })
     return results
 
 
