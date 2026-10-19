@@ -1,5 +1,7 @@
 # Automatic comparison and human review — integration acceptance
 
+Update, 19 October 2026: PR #37 merged this integration into main. The report below records the pre-merge test run; it does not establish deployment or owner acceptance.
+
 19 October 2026. Draft integration of PR #33 (`1879bcd`) and PR #25 (`e0e8839`), including current main's submission scope freeze. Local synthetic DOCX only. PDF PR #27 is separate.
 
 ## Result

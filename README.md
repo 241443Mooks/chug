@@ -1,91 +1,35 @@
-# CHUG
+# Chug
 
-**Capture. Hold. Use. Grow.**
+A contract comparison prototype built for the PortSwagger project. It uses fictional documents.
 
-*An enduring organisational knowledge foundation.*
+The immediate job is “spot the difference”: find a suitable reference, compare the incoming contract with it, and show the wording that needs a person's attention.
 
-**Licence:** [Proprietary — evaluation only](LICENSE.md). You may inspect and test this prototype for assessment; reuse, redistribution and commercial use require written permission.
+## What works now
 
-## The idea
+- The local app accepts DOCX files, individually or in batches of up to 20.
+- It searches the active reference library and compares supported NDAs and customer orders when it finds a suitable match. If it cannot select a reference, it keeps the file in the queue and explains why comparison did not run.
+- Reviewers can inspect source wording and original files, assess findings, and accept a contract or flag it for further review. Other recorded outcomes include requesting amendments, rejection and escalation.
+- It keeps decisions and their evidence. A reviewer can explicitly share a decision for later retrieval or withdraw it.
+- The [public demo](https://chug.smooks.co.uk) shows fictional reviews. It cannot accept uploads or save decisions. Changes in this repo do not establish what is currently deployed.
 
-Every day, organisations generate knowledge through the work their people do.
+The comparison works without AI. An optional AI clause explanation is off by default; its usefulness has not been established.
 
-People review information, solve problems, make decisions, develop expertise and learn from experience.
+## What does not work yet
 
-Much of that knowledge already exists somewhere — in documents, systems, previous decisions and people's heads. But it isn't always easy to find, connect or reuse when a similar situation arises.
+Matching is limited. In the recorded ten-file blinded fixture check, it chose five correct references, left three matchable files unmatched, and correctly declined both unsupported examples. This is a small synthetic check, not a general accuracy result. See the [test record](docs/INTEGRATED_REVIEW_ACCEPTANCE.md).
 
-Organisations change, too. People move on, teams evolve and systems are replaced. Information may survive, but the context, connections and experience that make it valuable can be lost.
+This version does not support PDFs or scanned documents. It has no connected document feed, built-in scheduler, production access controls or cross-system knowledge map. It does not provide legal advice and has not been validated for real legal work. Use fictional files only.
 
-**An organisation should be able to build on what it already knows, rather than repeatedly starting again.**
+## What it is being built to do
 
-That's the idea I'm exploring with Chug.
+Process incoming contracts without someone classifying each one by hand, show differences against an appropriate standard, and make relevant earlier decisions easier to find. A local directory import script exists; a live feed and reliable private hosting still need work.
 
-I want to understand how organisations can preserve the knowledge generated through everyday work, make it available when needed and allow its usefulness to grow over time.
+The wider question is whether recording the evidence and reasoning from one review can reduce repeated work in the next. That benefit is not yet measured.
 
-Not by asking people to spend more time documenting what they know, but by finding ways to capture useful knowledge through the work they're already doing.
+## What it must never decide
 
-The principle is simple:
+It must never approve a contract, accept legal risk or turn a past decision into policy on someone's behalf. It cannot guarantee that it has found every issue or that an agreement is safe to sign. Those are limits of the role, not missing features.
 
-**The work creates knowledge. Chug preserves and connects it. That knowledge helps with the next piece of work.**
+[Run it and try the examples](START_HERE.md) · [Product direction](docs/PRODUCT_DIRECTION.md) · [Technical scope](docs/PRODUCT_SPEC.md)
 
-Capture. Hold. Use. Grow.
-
-The ambition is not to replace human expertise, but to help it survive, circulate and grow.
-
-## Starting with commercial contract review
-
-My first experiment explores a problem faced by legal teams.
-
-Many commercial contracts follow established templates. Amendments and exceptions often resemble things the team has considered before, yet reviewing each new document can still involve substantial repetitive work.
-
-I'm exploring whether I can reduce that effort using conventional software to compare incoming contracts with reference standards, make differences easier to inspect and bring relevant previous decisions into view.
-
-At the same time, I want to understand how much useful organisational knowledge can be captured simply through that review process, without creating more work for the people using it.
-
-I'll start with what's already available, establish what happens and how often, then explore where additional context, connections or AI capabilities would genuinely help.
-
-**The legal workflow is the first experiment. The knowledge foundation is the bigger idea.**
-
-## What I've built so far
-
-I've built a small working prototype using fictional commercial contracts to explore this idea in practice.
-
-Chug compares incoming contracts against reference standards, highlights differences and makes relevant previous decisions easier to find.
-
-It also captures decisions made during the review process, preserving their connection to the original documents and evidence.
-
-The comparison works without AI. People remain responsible for interpreting the information and making decisions.
-
-This is an early experiment, not a validated legal product.
-
-What I want to explore next is how much useful organisational knowledge can accumulate through ordinary work, without creating additional administration for the people doing it.
-
-For the working demonstration, technical details and limitations, see [START_HERE.md](START_HERE.md).
-
-## Where I'm exploring next
-
-The next step is to work with a real team to understand what information already exists, how work flows through the organisation and what knowledge can be captured naturally along the way.
-
-I want to start small: establish what happens, how often it happens and where the greatest opportunities lie before deciding what to build next.
-
-Over time, Chug could support different ways of finding, connecting and using organisational knowledge.
-
-AI may play an important role in that, but its purpose isn't to make decisions on behalf of people. It's to make accumulated knowledge more accessible and useful.
-
-Different teams may need different capabilities. The direction Chug takes will be shaped by the people doing the work, the problems worth solving and the evidence of what genuinely helps.
-
-**The foundation is intended to grow with the organisation's needs, rather than dictate how the organisation should work.**
-
-## Explore Chug
-
-Chug is an early-stage experiment, built using fictional data. It is not a production legal review system.
-
-The prototype can be run locally without an AI subscription.
-
-- [Start here](START_HERE.md) — explore the working demonstration.
-- [Product direction](docs/PRODUCT_DIRECTION.md) — the thinking behind Chug and how it might develop.
-- [AI architecture](docs/AI_ARCHITECTURE.md) — current capabilities, possibilities and limitations.
-
-This project is a work in progress. The aim is to learn what genuinely helps people, build on that evidence and let the solution develop from there.
-
-*thank you for exploring with me, Mooks*
+[Proprietary licence: evaluation only](LICENSE.md). Reuse, redistribution and commercial use require written permission.
