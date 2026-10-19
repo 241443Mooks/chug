@@ -1,4 +1,4 @@
-# Deploy CHUG to Cloudflare Pages
+# Deploy the public demo to Cloudflare Pages
 
 This repository has two separate experiences:
 - `web/` is the **static, read-only public demo** using precomputed, fictional data. This is what Cloudflare Pages should host.

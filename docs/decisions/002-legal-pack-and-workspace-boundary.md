@@ -1,5 +1,7 @@
 # Decision 002 — Keep the working Legal pack separate from future workspaces
 
+Update, 19 October 2026: this records an earlier architecture decision. Main now includes customer-order intake and comparison through PR #37. Use [current scope](../PRODUCT_SPEC.md) for supported workflows; the original reasoning below is retained as history.
+
 **Status:** accepted for the synthetic prototype; multi-workspace architecture remains a proposal.
 
 ## Problem and success criterion
