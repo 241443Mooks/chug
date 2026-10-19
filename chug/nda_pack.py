@@ -30,8 +30,8 @@ class NDAPack:
     def validate_reference(self, document, bundled_reference):
         if document["coverage"]["status"] != "complete" or duplicate_headings(document):
             raise ValueError("Reference extraction or clause alignment is incomplete; choose a supported synthetic NDA")
-        if not set(clauses(bundled_reference)).issubset(clauses(document)):
-            raise ValueError("Reference has different or missing clause headings; this prototype needs the bundled NDA clause family")
+        if len(clauses(document)) < 3:
+            raise ValueError("Reference has too few extracted provisions for a supported NDA comparison")
 
     def analyse(self, reference, document, historical, decisions, published, bundled_reference):
         known = reference["sha256"] == bundled_reference["sha256"]

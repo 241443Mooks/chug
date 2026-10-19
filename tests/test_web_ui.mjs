@@ -61,16 +61,16 @@ test('Home counts pending work and each category opens its filtered queue',async
 test('decision controls retain human outcomes, rationale and finding selection',()=>{
   const h=harness(items);
   const html=h.run("decisionView({analysis:{findings:[{id:'finding-1',title:'Broad rights'}]}})");
-  for(const outcome of ['approve','request_amendment','reject','escalate'])assert.match(html,new RegExp(`value="${outcome}"`));
+  for(const outcome of ['accept_contract','flag_for_review'])assert.match(html,new RegExp(`value="${outcome}"`));
   assert.match(html,/name="reviewer" required/);
   assert.match(html,/name="rationale" required/);
-  assert.match(html,/name="finding" value="finding-1"/);
-  assert.match(html,/Recording a decision does not publish it as precedent/);
+  assert.match(html,/independently reviewed the exact incoming original/);
+  assert.match(html,/person decides what happens/);
   h.run('state.staticDemo=true');
   const publicHtml=h.run("decisionView({analysis:{findings:[]}})");
-  assert.match(publicHtml,/Decisions happen in the private review workflow/);
-  assert.match(publicHtml,/cannot record a decision or approve a contract/);
-  assert.doesNotMatch(publicHtml,/are saved in review history/);
+  assert.match(publicHtml,/Example contract outcomes/);
+  assert.match(publicHtml,/cannot accept or flag contracts/);
+  assert.doesNotMatch(publicHtml,/<form/);
 });
 
 test('T05 overview surfaces every finding as a distinct source-linked item',()=>{
@@ -83,7 +83,7 @@ test('T05 overview surfaces every finding as a distinct source-linked item',()=>
   assert.equal((html.match(/class="finding-summary"/g)||[]).length,4);
   for(const finding of detail.analysis.findings){
     assert.ok(html.includes(finding.title),`missing finding title ${finding.title}`);
-    assert.ok(html.includes(`data-anchor="${finding.sources[0].anchor}"`),`missing source link ${finding.id}`);
+    assert.ok(html.includes(`data-review-finding="${finding.id}"`),`missing finding review link ${finding.id}`);
   }
   assert.match(html,/Schedule 1 — Additional Terms/);
   assert.match(html,/Despite clause 3, the receiving party may use/);
@@ -97,6 +97,21 @@ test('T05 overview surfaces every finding as a distinct source-linked item',()=>
   assert.match(h.run('reviewNav(state.detail)'),/Checks run/);
   assert.match(css,/\.next-step\{[^}]*justify-content:space-between/);
   assert.match(css,/\.finding-summary\{[^}]*display:flex/);
+});
+
+test('finding review presents five distinct assessments and direct previous/next actions',()=>{
+  const h=harness(items),detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'));
+  h.run('state.detail='+JSON.stringify(detail)+'; state.id="T05"; state.tab="finding"; state.anchor='+JSON.stringify(detail.analysis.findings[1].id));
+  const view=h.run('findingReviewView(state.detail,state.detail.analysis.findings[1])');
+  for(const label of ['Not relevant','Acceptable','Problem','Needs further review','Deal breaker'])assert.match(view,new RegExp(label));
+  assert.match(view,/Review finding 2 of 4/);
+  assert.match(view,/data-next-finding/);
+  assert.match(view,/data-prev-finding/);
+  assert.match(view,/This does not reject the contract/);
+  h.run('state.staticDemo=true');
+  const publicView=h.run('findingReviewView(state.detail,state.detail.analysis.findings[1])');
+  assert.match(publicView,/Example finding assessments/);
+  assert.doesNotMatch(publicView,/<form/);
 });
 
 test('reference wording distinguishes evidenced additions from unclear matches',()=>{
@@ -139,11 +154,31 @@ test('T05 findings 2 and 4 survive the finding → comparison → finding round 
 
 test('Add DOCX is a keyboard-operable native button wired to the existing picker',()=>{
   const h=harness(items);
-  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Add DOCX<\/button>/);
-  assert.match(html,/<input id="upload" type="file" accept="\.docx" hidden>/);
+  assert.match(html,/<button class="upload-button" id="upload-trigger" type="button">Upload DOCX contracts<\/button>/);
+  assert.match(html,/<input id="upload" type="file" accept="\.docx" multiple hidden>/);
   assert.equal(typeof h.node('upload-trigger').onclick,'function');
   h.node('upload-trigger').onclick();
   assert.deepEqual(h.clicks,['upload']);
+});
+
+test('local queue gives local review guidance while public queue states its read-only limit',()=>{
+  const local=harness(items,'127.0.0.1');
+  assert.match(local.run('queueView()'),/You can record a human decision in this local workspace/);
+  assert.doesNotMatch(local.run('queueView()'),/This public demo cannot save decisions/);
+  const publicDemo=harness(items,'chug.smooks.co.uk');
+  assert.match(publicDemo.run('queueView()'),/This public demo cannot save decisions/);
+});
+
+test('private batch summary shows each outcome and a route to its review',()=>{
+  const h=harness(items,'127.0.0.1');
+  h.run("state.batchResult={submitted:2,counts:{analysed:1,awaiting_reference:0,blocked_extraction:0,duplicate:0,failed:1},items:[{filename:'matched.docx',outcome:'analysed',reason:'Compared',sha256:'abc',id:'I-abc'},{filename:'invalid.txt',outcome:'failed',reason:'DOCX only'}]}");
+  const page=h.run('queueView()');
+  assert.match(page,/Batch intake · 2 files/);
+  assert.match(page,/data-batch-intake="abc"/);
+  assert.match(page,/invalid\.txt.*DOCX only/);
+  const publicDemo=harness(items,'chug.smooks.co.uk');
+  publicDemo.run("state.batchResult={submitted:1,counts:{analysed:1},items:[]}");
+  assert.doesNotMatch(publicDemo.run('queueView()'),/Batch intake/);
 });
 
 test('queue title and route badge can wrap without collapsing the title column',()=>{
@@ -339,7 +374,7 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/will not suggest it for new contracts/);
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/How references work/);
   assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
 });
 
@@ -379,12 +414,12 @@ test('new intake detail shows a provisional comparison with source anchors and t
     analysis:{findings:[{title:'Changed retention',explanation:'The period differs.',sources:[{anchor:'word/document.xml:p4',text:'Confidentiality lasts seven years.'}],reference:{anchor:'word/document.xml:p4',text:'Confidentiality lasts five years.'}}]}
   }));
   const complete=h.run('intakeView(state.intake)');
-  assert.match(complete,/Proposed reference · not confirmed/);
+  assert.match(complete,/Chug selected this reference · check applicability/);
   assert.match(complete,/word\/document.xml:p4/);
   assert.match(complete,/provisional NDA comparison/);
   assert.match(complete,/Download exact incoming DOCX/);
   assert.match(complete,/Record your review decision/);
-  assert.match(complete,/Confirm reference and compare/);
+  assert.match(complete,/Confirm reference applicability/);
   assert.match(complete,/independently inspect the exact incoming original/);
   assert.match(complete,/independent_original_reviewed/);
   assert.match(source,/reviewed\.required=decision\.value==='approve'/);
@@ -407,6 +442,63 @@ test('new intake detail shows a provisional comparison with source anchors and t
   assert.match(h.run('intakeView(state.intake)'),/Reference source unavailable/);
   h.run('state.intake.source_integrity.reference="not_linked"');
   assert.doesNotMatch(h.run('intakeView(state.intake)'),/Reference source not_linked/);
+});
+
+
+test('finding navigation retains its exact identity for render and direct deep links',async()=>{
+  const h=harness(items);
+  const detail=JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'));
+  h.context.fetch=async()=>({ok:true,json:async()=>detail});
+  const finding=detail.analysis.findings[1];
+  await h.run(`navigate('review','T05','finding',${JSON.stringify(finding.id)})`);
+  assert.equal(h.run('state.anchor'),finding.id);
+  assert.match(h.node('workspace').innerHTML,/Example finding assessments|Your assessment/);
+  assert.doesNotMatch(h.node('workspace').innerHTML,/This finding is unavailable/);
+  const parsed=h.run('route()');
+  assert.equal(parsed.anchor,finding.id);
+  await h.run(`navigate('review','T05','finding',${JSON.stringify(parsed.anchor)},true)`);
+  assert.match(h.node('workspace').innerHTML,/Review finding 2 of 4/);
+});
+
+test('uploaded reviews preserve reference evidence, saved assessment revisions and separate contract history',()=>{
+  const h=harness(items);
+  const assessment={finding_id:'retention',assessment:'problem',reviewer:'Pilot reviewer',reason:'Resolve archive wording.',revision:1,timestamp:'2026-10-19T06:00:00Z',evidence:{title:'Changed retention'}};
+  h.run('state.intake='+JSON.stringify({
+    source_integrity:{incoming:'verified',reference:'verified'},
+    comparison:{observations:[{id:'retention',title:'Changed retention',incoming_passages:[{anchor:'p9',text:'Retain indefinitely.'}],reference_passages:[{anchor:'p9',text:'Delete on request.'}]}]},
+    latest_finding_assessments:{retention:assessment},finding_assessments:[assessment],
+    review_state:'flagged',contract_actions:[{contract_action:'flag_for_review',reviewer:'Second reviewer',rationale:'Ask legal.',timestamp:'2026-10-19T06:01:00Z'}],
+  }));
+  const rendered=h.run('intakeActionsView(state.intake)');
+  assert.match(rendered,/Retain indefinitely/);
+  assert.match(rendered,/Delete on request/);
+  assert.match(rendered,/Latest: <strong>problem<\/strong> · Pilot reviewer · revision 1/);
+  assert.match(rendered,/Review history/);
+  assert.match(rendered,/Contract action · flag for review/);
+  assert.match(rendered,/Resolve archive wording/);
+  assert.match(rendered,/Finding assessments do not decide the contract/);
+  h.run('state.intake.source_integrity.reference="unavailable"');
+  assert.doesNotMatch(h.run('intakeActionsView(state.intake)'),/class="finding-assessment-form"/);
+  assert.match(h.run('intakeActionsView(state.intake)'),/until both originals are verified/);
+  h.run('state.staticDemo=true');
+  assert.doesNotMatch(h.run('intakeActionsView(state.intake)'),/<form/);
+});
+
+test('contract review shows pending flag and unresolved acceptance safeguards in private workflow',()=>{
+  const h=harness(items);
+  h.run('state.detail = '+JSON.stringify(JSON.parse(readFileSync(new URL('../web/demo-data/contracts/T05.json',import.meta.url),'utf8'))));
+  const html=h.run('decisionView(state.detail)');
+  assert.match(html,/Flag for further review/);
+  assert.match(html,/unresolved_findings_acknowledged/);
+  assert.match(html,/Other contract decisions/);
+  assert.match(html,/Request amendment/);
+  assert.match(html,/Reject contract/);
+  assert.match(html,/Escalate contract/);
+  assert.match(html,/unassessed or unresolved findings/);
+  h.run('state.staticDemo=true');
+  const publicHTML=h.run('decisionView(state.detail)');
+  assert.match(publicHTML,/Example contract outcomes/);
+  assert.doesNotMatch(publicHTML,/<form/);
 });
 
 test('public reference page keeps its standard upload control hidden',()=>{
@@ -446,4 +538,15 @@ test('public pages use clear tasks and keep human decision limits visible',()=>{
   const history=readFileSync(new URL('../web/decision-log.html',import.meta.url),'utf8');
   assert.match(history,/These decisions are made up/);
   assert.match(history,/Do not use these examples as approval/);
+});
+
+test('public home does not advertise a reference choice for uploads',()=>{
+  const publicApp=harness(items,'chug.smooks.co.uk');
+  const home=publicApp.run('homeView()');
+  assert.match(home,/This public demo does not accept uploads/);
+  assert.doesNotMatch(home,/Reference for new uploads|loading reference|data-page="reference"/);
+  const localApp=harness(items,'localhost');
+  const localHome=localApp.run('homeView()');
+  assert.match(localHome,/Chug searches the Active reference library/);
+  assert.doesNotMatch(localHome,/Reference for new uploads|loading reference/);
 });

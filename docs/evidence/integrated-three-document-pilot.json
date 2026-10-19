@@ -1,0 +1,95 @@
+{
+  "capture_sha256": "2c5ce154a27803d34d4ef068638d8f9576acf949c9f13136c0a8cace816f4676",
+  "counts": {
+    "analysed": 2,
+    "awaiting_reference": 1,
+    "blocked_extraction": 0,
+    "duplicate": 0,
+    "failed": 0
+  },
+  "restart_identical": true,
+  "originals_verified": true,
+  "duplicate_count": 3,
+  "rows": [
+    {
+      "filename": "Incoming - Evaluation NDA with Longer Retention.docx",
+      "sha256": "9f1be3a46af4074d4e986ae200f3c49a22b70aca7c0d2e1e604e8737bfcbb81a",
+      "queue_id": "I-9f1be3a46a",
+      "family": "nda",
+      "reference": {
+        "status": "proposed",
+        "reference_id": "UP-6a1055c5a7b2f93159080bd9a3b0f2a774390fdbdac89c1b669fa886bd4fe59a",
+        "sha256": "6a1055c5a7b2f93159080bd9a3b0f2a774390fdbdac89c1b669fa886bd4fe59a",
+        "display_name": "Mutual NDA - Product Evaluation - UK - v0.1"
+      },
+      "comparison_status": "analysed",
+      "finding_count": 4,
+      "findings": [
+        {
+          "id": "changed_clause:word/document.xml:p1",
+          "title": "Changed: Unsectioned text"
+        },
+        {
+          "id": "changed_clause:word/document.xml:p2",
+          "title": "Changed: Unsectioned text"
+        },
+        {
+          "id": "changed_clause:word/document.xml:p3",
+          "title": "Changed: Unsectioned text"
+        },
+        {
+          "id": "changed_clause:word/document.xml:p17",
+          "title": "Changed: Security and return"
+        }
+      ],
+      "human_decision": "pending",
+      "reference_confirmation": null,
+      "reason": "Chug selected a context-compatible NDA reference and compared it on upload. Check the proposed reference and findings before deciding."
+    },
+    {
+      "filename": "Incoming - Desktop Reseller Seat Increase.docx",
+      "sha256": "382fa40007ca24b7894b155874a504d41940ee775b757f6ae7040b8cc6eb393f",
+      "queue_id": "I-382fa40007",
+      "family": "customer_order",
+      "reference": {
+        "status": "proposed",
+        "reference_id": "UP-25faa37169e381da193d6e353b77c84aec9ca091e86c4a167d18e998cdd03fa1",
+        "sha256": "25faa37169e381da193d6e353b77c84aec9ca091e86c4a167d18e998cdd03fa1",
+        "display_name": "Customer Order - Reseller Desktop Licences - v0.1"
+      },
+      "comparison_status": "complete",
+      "finding_count": 2,
+      "findings": [
+        {
+          "id": "changed_section:word/document.xml:p1",
+          "title": "Changed section: Unsectioned document text"
+        },
+        {
+          "id": "changed_section:word/document.xml:p8",
+          "title": "Changed section: Order scope"
+        }
+      ],
+      "human_decision": "pending",
+      "reference_confirmation": null,
+      "reason": "Chug selected a context-compatible customer-order reference and compared it on upload. Check the proposed reference and findings before deciding."
+    },
+    {
+      "filename": "Incoming - Ambiguous Reseller Cloud Scan Purchase.docx",
+      "sha256": "360def80fc88cef8212e2bfb83e9985acf42e1d07cd74d9db241733a6e4ead90",
+      "queue_id": "I-360def80fc",
+      "family": "customer_order",
+      "reference": {
+        "status": "unresolved",
+        "reference_id": null,
+        "sha256": null,
+        "display_name": null
+      },
+      "comparison_status": "not_run",
+      "finding_count": 0,
+      "findings": [],
+      "human_decision": "pending",
+      "reference_confirmation": null,
+      "reason": "No reference matches the extracted family and applicability context."
+    }
+  ]
+}

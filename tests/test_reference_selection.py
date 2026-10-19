@@ -62,8 +62,8 @@ class ReferenceSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
             app = App(ROOT, state)
-            with self.assertRaisesRegex(ValueError, "missing clause headings"):
-                app.upload_reference(no_licence, "unsupported.docx")
+            with self.assertRaisesRegex(ValueError, "incomplete|determine"):
+                app.upload_reference(b"not a DOCX package", "unsupported.docx")
             chosen_sha = app.upload_reference(valid, "valid.docx")["current"]["sha256"]
             uploaded = app.upload((ROOT / "dataset/incoming/T06-paraphrase-equivalent.docx").read_bytes(), "later.docx")
             original = state / "references" / (chosen_sha + ".docx")

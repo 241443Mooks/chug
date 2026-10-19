@@ -40,6 +40,167 @@ class IncomingIntakeTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_registered_specimens_are_found_and_compared_without_per_upload_selection(self):
+        specimens = [
+            ("references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx", "Incoming - Desktop Reseller Seat Increase.docx", "customer_order", "complete"),
+            ("references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx", "Incoming - Evaluation NDA with Longer Retention.docx", "nda", "analysed"),
+        ]
+        base = ROOT / "research/reference-library-v0.1"
+        for reference_name, incoming_name, family, expected_status in specimens:
+            source = base / reference_name
+            incoming = base / "incoming-tests" / incoming_name
+            registered = self.app.upload_reference(source.read_bytes(), source.name)["library_item"]
+            self.assertEqual(registered["status"], "active")
+            self.assertEqual(registered["family"], family)
+            self.assertTrue(any(row["sha256"] == registered["sha256"] and row["status"] == "research_candidate" for row in self.app.reference_library_list()["references"]))
+            detail = self.app.intake(incoming.read_bytes(), incoming.name)
+            self.assertEqual(detail["comparison"]["status"], expected_status)
+            self.assertEqual(detail["reference"]["sha256"], registered["sha256"])
+            self.assertIn(detail["matching"]["proposal"]["status"], {"proposed", "proposed_with_gaps"})
+            self.assertTrue(detail["comparison"]["provisional"])
+            self.assertNotIn("reference_confirmation", detail)
+            self.assertEqual(detail["human_decision"]["status"], "pending")
+            restored = App(ROOT, self.state).intake_detail(detail["incoming"]["sha256"])
+            self.assertEqual(restored["comparison"], detail["comparison"])
+            duplicate = self.app.intake(incoming.read_bytes(), "copy.docx")
+            self.assertEqual(duplicate["id"], detail["id"])
+        self.assertEqual(len(self.app.intakes), 2)
+
+
+    def test_starter_reproduces_all_five_submission_scenarios(self):
+        from scripts.seed_synthetic_starter import seed
+
+        first = seed(self.state)
+        self.assertEqual(len(first), 5)
+        self.assertEqual([row["example"] for row in first], [
+            "exact copy", "changed wording", "exact copy", "changed wording", "ambiguous purchase",
+        ])
+        for row in first[:4]:
+            self.assertEqual(row["selected_reference_id"], row["expected_reference_id"])
+            self.assertIn(row["comparison_status"], {"analysed", "complete"})
+            self.assertEqual(row["human_decision"], "pending")
+        abstained = first[-1]
+        self.assertIsNone(abstained["selected_reference_id"])
+        self.assertEqual(abstained["comparison_status"], "not_run")
+        self.assertEqual(abstained["human_decision"], "pending")
+        self.assertTrue(abstained["reason"])
+        repeated = seed(self.state)
+        self.assertEqual(
+            [(row["incoming_sha256"], row["selected_reference_id"], row["comparison_status"]) for row in repeated],
+            [(row["incoming_sha256"], row["selected_reference_id"], row["comparison_status"]) for row in first],
+        )
+        self.assertEqual(len(App(ROOT, self.state).intakes), 5)
+
+
+    def test_explicit_wrong_family_and_unverified_reference_are_blocked(self):
+        standard = (ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx")
+        incoming = (ROOT / "research/reference-library-v0.1/incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx")
+        registered = self.app.upload_reference(standard.read_bytes(), standard.name)["library_item"]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.app.intake(incoming.read_bytes(), incoming.name, registered["reference_id"], "Fictional reviewer", "Wrong family")
+        self.assertEqual(len(self.app.intakes), 0)
+        with self.assertRaisesRegex(ValueError, "Active reference"):
+            self.app.intake(incoming.read_bytes(), incoming.name, "ORDER-RESELLER", "Fictional reviewer", "Research only")
+
+    def test_exact_reference_copies_have_no_reported_differences_but_still_need_review(self):
+        base = ROOT / "research/reference-library-v0.1/references"
+        for relative in ("nda/Mutual NDA - Product Evaluation - UK - v0.1.docx", "sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"):
+            source = base / relative
+            data = source.read_bytes()
+            registered = self.app.upload_reference(data, source.name)["library_item"]
+            result = self.app.intake(data, "Incoming " + source.name)
+            self.assertEqual(result["comparison"].get("findings", result["comparison"].get("observations")), [])
+            self.assertEqual(result["human_decision"]["status"], "pending")
+            self.assertEqual(result["reference"]["sha256"], registered["sha256"])
+            self.assertNotIn("reference_confirmation", result)
+
+    def test_http_explicit_reference_upload_runs_comparison(self):
+        source = ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"
+        incoming = ROOT / "research/reference-library-v0.1/incoming-tests/Incoming - Desktop Reseller Seat Increase.docx"
+        reference_id = self.app.upload_reference(source.read_bytes(), source.name)["library_item"]["reference_id"]
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Handler.app = self.app
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            boundary = "explicit-reference"
+            fields = [("reference_id", reference_id), ("reviewer", "Fictional reviewer"), ("rationale", "Reseller desktop scope applies.")]
+            body = b"".join((f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n').encode() for name, value in fields)
+            body += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="incoming.docx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + incoming.read_bytes() + f'\r\n--{boundary}--\r\n'.encode()
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/intakes", data=body, method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            result = json.loads(urlopen(request).read())
+            self.assertEqual(result["comparison"]["status"], "complete")
+            self.assertEqual(result["reference_confirmation"]["reference_id"], reference_id)
+            self.assertEqual(result["human_decision"]["status"], "pending")
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
+    def test_batch_runs_each_source_automatically_and_is_idempotent(self):
+        base = ROOT / "research/reference-library-v0.1"
+        nda_ref = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        order_ref = base / "references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx"
+        for source in (nda_ref, order_ref):
+            self.app.upload_reference(source.read_bytes(), source.name)
+        files = [(path.name, path.read_bytes()) for path in (
+            base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx",
+            base / "incoming-tests/Incoming - Desktop Reseller Seat Increase.docx",
+            base / "incoming-tests/Incoming - Ambiguous Reseller Cloud Scan Purchase.docx",
+        )]
+        files.append(("not-a-contract.txt", b"unsupported"))
+        batch = self.app.intake_batch(files)
+        self.assertEqual(batch["counts"], {"analysed": 2, "awaiting_reference": 1, "blocked_extraction": 0, "duplicate": 0, "failed": 1})
+        self.assertEqual([row["comparison_status"] for row in batch["items"][:3]], ["analysed", "complete", "not_run"])
+        self.assertEqual(len(self.app.intakes), 3)
+        repeated = App(ROOT, self.state).intake_batch(files)
+        self.assertEqual(repeated["counts"]["duplicate"], 3)
+        self.assertEqual(repeated["counts"]["failed"], 1)
+        self.assertEqual([row.get("id") for row in repeated["items"][:3]], [row["id"] for row in batch["items"][:3]])
+        with self.assertRaisesRegex(ValueError, "1 to 20"):
+            self.app.intake_batch(files * 6)
+
+    def test_http_batch_accepts_multiple_files_and_reports_per_file_state(self):
+        base = ROOT / "research/reference-library-v0.1"
+        source = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        changed = base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx"
+        self.app.upload_reference(source.read_bytes(), source.name)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Handler.app = self.app
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            boundary = "batch-intake"
+            body = b""
+            for filename, data in [("exact.docx", source.read_bytes()), (changed.name, changed.read_bytes()), ("unsupported.txt", b"text")]:
+                body += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode() + data + b"\r\n"
+            body += f"--{boundary}--\r\n".encode()
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/intakes/batch", data=body, method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            batch = json.loads(urlopen(request).read())
+            self.assertEqual(batch["counts"]["analysed"], 2)
+            self.assertEqual(batch["counts"]["failed"], 1)
+            self.assertEqual(batch["items"][0]["comparison_status"], "analysed")
+            self.assertEqual(batch["items"][2]["outcome"], "failed")
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
+    def test_directory_feed_pass_uses_batch_pipeline_and_deduplicates(self):
+        from scripts.ingest_directory import ingest
+
+        base = ROOT / "research/reference-library-v0.1"
+        source = base / "references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx"
+        changed = base / "incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx"
+        self.app.upload_reference(source.read_bytes(), source.name)
+        drop = self.state / "drop"
+        drop.mkdir()
+        (drop / "exact.docx").write_bytes(source.read_bytes())
+        (drop / "changed.docx").write_bytes(changed.read_bytes())
+        first = ingest(self.state, drop)
+        self.assertEqual(first["counts"]["analysed"], 2)
+        self.assertEqual(ingest(self.state, drop)["counts"]["duplicate"], 2)
+
     def test_new_nda_runs_provisional_comparison_and_persists_identity_and_queue(self):
         standard = (ROOT / "dataset/incoming/T02-known-term-change.docx").read_bytes()
         self.app.upload_reference(standard, "fictional-nda-standard.docx")
@@ -78,16 +239,17 @@ class IncomingIntakeTests(unittest.TestCase):
         self.assertEqual(result["status"], "analysed_needs_review")
         self.assertEqual(result["matching"]["incoming"]["sha256"], extracted["sha256"])
 
-    def test_customer_order_is_queued_without_bypassing_confirmation(self):
+    def test_customer_order_is_compared_automatically_but_remains_unconfirmed(self):
         reference = changed_docx(ORDER.read_bytes(), b"12 named desktop software users", b"13 named desktop software users")
         incoming = changed_docx(reference, b"13 named desktop software users", b"14 named desktop software users")
         self.app.upload_reference(reference, ORDER.name)
 
         result = self.app.intake(incoming, "fictional-customer-order.docx")
         self.assertEqual(result["family"], "customer_order")
-        self.assertEqual(result["status"], "awaiting_reference")
-        self.assertEqual(result["comparison"]["status"], "not_run")
-        self.assertIn("explicit reviewer confirmation", result["reason"])
+        self.assertEqual(result["status"], "analysed_needs_review")
+        self.assertEqual(result["comparison"]["status"], "complete")
+        self.assertTrue(result["comparison"]["provisional"])
+        self.assertNotIn("reference_confirmation", result)
         self.assertEqual(result["human_decision"]["status"], "pending")
         self.assertTrue(any(row.get("intake_sha256") == result["incoming"]["sha256"] for row in self.app.queue()))
 

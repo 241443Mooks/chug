@@ -1,0 +1,72 @@
+{
+  "browser": "153.0.8010.0",
+  "viewports": [
+    "1440x1000",
+    "390x844"
+  ],
+  "checks": [
+    "page identity, meaningful app content, no framework overlay",
+    "two controlled references uploaded and registered Active through browser",
+    "NDA comparison -> original downloads -> finding assessment -> separate pending flag -> reference confirmation",
+    "customer-order automatic findings show both original/reference excerpts; assessment and separate applicability confirmation persist",
+    "390px mobile deep-link refresh, keyboard queue -> review navigation, no horizontal overflow",
+    "cold service restart preserves browser-visible assessments, flag and reference confirmation",
+    "exact NDA and exact order auto-compare with zero differences and pending human action; exact NDA accepts only after original-review acknowledgement"
+  ],
+  "errors": [],
+  "writes": [
+    {
+      "url": "/api/reference/upload",
+      "status": 201
+    },
+    {
+      "url": "/api/reference/upload",
+      "status": 201
+    },
+    {
+      "url": "/api/intakes/batch",
+      "status": 201
+    },
+    {
+      "url": "/api/finding-assessments",
+      "status": 201
+    },
+    {
+      "url": "/api/contract-actions",
+      "status": 201
+    },
+    {
+      "url": "/api/intakes/9f1be3a46af4074d4e986ae200f3c49a22b70aca7c0d2e1e604e8737bfcbb81a/reference-confirmation",
+      "status": 201
+    },
+    {
+      "url": "/api/finding-assessments",
+      "status": 201
+    },
+    {
+      "url": "/api/intakes/382fa40007ca24b7894b155874a504d41940ee775b757f6ae7040b8cc6eb393f/reference-confirmation",
+      "status": 201
+    },
+    {
+      "url": "/api/intakes",
+      "status": 201
+    },
+    {
+      "url": "/api/contract-actions",
+      "status": 201
+    },
+    {
+      "url": "/api/intakes",
+      "status": 201
+    }
+  ],
+  "screenshots": [
+    "desktop-batch.png",
+    "desktop-saved-history.png",
+    "desktop-order-review.png",
+    "desktop-abstention.png",
+    "mobile-abstention.png",
+    "mobile-order-review.png",
+    "desktop-exact-acceptance.png"
+  ]
+}

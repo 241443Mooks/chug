@@ -603,9 +603,16 @@
       "method": "lexical ranking of changed passages and clause topics"
     },
     "reference_sha256": "2c9ab77e5256c2cd1a964955d97ab8f002fee40c26c61c2f23bae56da707e817",
-    "comparison_lessons": []
+    "comparison_lessons": [],
+    "assessments": {},
+    "contract_actions": []
   },
   "history": [],
+  "finding_assessments": [],
+  "latest_finding_assessments": {},
+  "contract_actions": [],
+  "review_state": "pending",
+  "latest_flag": null,
   "publications": [],
   "corrections": [],
   "ai": {

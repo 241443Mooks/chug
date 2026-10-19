@@ -199,3 +199,16 @@ body.static-demo .tabs{gap:clamp(12px,2vw,26px);overflow:auto}
   .comparison-heading{display:block}
   .comparison-heading>p{margin-top:10px}
 }
+.incoming-upload{padding:0 22px 18px;display:grid;gap:8px}.incoming-upload[hidden]{display:none}.incoming-upload p{font-size:12px;color:var(--muted);margin:0}.incoming-upload button{justify-self:start}
+.batch-summary{border:1px solid var(--line);border-radius:6px;background:#fff;padding:18px;margin:18px 0}.batch-summary h2{font:700 20px/1.3 var(--serif);margin:0 0 5px}.batch-summary p{font-size:13px;color:var(--muted);margin:0 0 10px}.batch-summary ul{margin:0;padding-left:20px}.batch-summary li{padding:6px 0;overflow-wrap:anywhere}
+.finding-review{max-width:900px}.finding-review h2{font:700 clamp(28px,3vw,40px)/1.15 var(--serif)}.finding-review h3{font:700 18px var(--serif);margin:22px 0 5px}.finding-review>p{line-height:1.55}.finding-review form{margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:6px;background:white}.finding-review fieldset{border:0;padding:0;margin:0 0 18px}.finding-review legend{font-weight:750;margin-bottom:9px}.assessment-option{display:flex;gap:11px;padding:12px;border:1px solid var(--line);border-radius:4px;margin:7px 0;cursor:pointer}.assessment-option span{display:grid;gap:3px}.assessment-option small{color:var(--muted);font-size:12px;line-height:1.4}.finding-step-nav{display:flex;justify-content:space-between;margin:24px 0}.finding-summary-state{margin-left:auto;color:var(--muted);font-size:12px;text-transform:capitalize;white-space:nowrap}.saved-assessment{padding:12px;background:var(--blue-pale);border-left:3px solid var(--blue)}.contract-action-form{display:grid;gap:12px}.contract-action-form .field{margin:0}
+/* Uploaded reviews use the same narrow-screen workspace as bundled reviews. */
+.page-intake{overflow-wrap:anywhere}
+.page-intake .finding-review,.page-intake .field{min-width:0}
+@media(max-width:700px){
+  .page-intake .queue-pane{display:none}
+  .page-intake .workspace{padding-top:23px}
+  .main-nav{min-width:0;max-width:100%}
+  .page-intake input,.page-intake select,.page-intake textarea{max-width:100%;min-width:0}
+}
+@media(max-width:700px){.comparison-heading>p{white-space:normal}}
