@@ -2,30 +2,32 @@
 
 PortSwigger's application task requests **a single zipped file** showing how AI could help a small legal team with routine contracts, recurring redlines and month-end/quarter-end review peaks. This is an application exercise, not a request for production legal automation.
 
-**Current status:** the working prototype can be reviewed locally. Human creative acceptance and final clean-package QA remain pending. Possible later product investments in `PRODUCT_DIRECTION.md` are not submission requirements. Package the final ZIP after the owner accepts the experience; do not describe an unobserved live AI run as completed.
+**Current status (19 October 2026):** integration PR #37 is merged into main at `477737d`, with passing main validation. The working prototype is ready for local owner review. Human creative acceptance and final clean-package QA remain pending. Today's bounded work is tracked in [the day plan](DAY_PLAN_2026-10-19.md); use [the five-case owner guide](OWNER_REVIEW.md) for the next review session. Possible later product investments in `PRODUCT_DIRECTION.md` are not submission requirements. Package the final ZIP after the owner accepts the experience; do not describe an unobserved live AI run as completed.
 
 ## Submission sprint gate — 19 October 2026
 
 **Scope freeze:** finish and prove the contract-review experiment, not a production legal platform. Prioritise the single-ZIP submission required by the application. The public read-only website is supporting evidence, not a submission dependency.
 
-### Release sequence (do not silently promote draft work)
+### Release sequence
 
-1. **Integrate the core:** review [PR #33](https://github.com/241443Mooks/chug/pull/33) for automatic identification of a single eligible Active reference, provisional NDA/customer-order comparison, real queue persistence and honest abstention. Its branch reports 85 Python tests, 29 UI tests, 6/6 baseline routes and 11/11 critical adversarial cases; GitHub Actions validation passed. **Not yet merged or manually browser-verified.**
-2. **Add only necessary human review:** reconcile [PR #25](https://github.com/241443Mooks/chug/pull/25) with #33 (both edit `chug/server.py`, `web/app.js`, `web/styles.css` and `tests/test_web_ui.mjs`); retain per-finding review and contract-level Accept/Flag, with the public demo read-only. Repeat integration tests and manual checks after reconciliation.
-3. **Defer PDF unless straightforward:** [PR #27](https://github.com/241443Mooks/chug/pull/27) also edits intake and UI files and requires integration, dependency and browser validation. Stable DOCX is enough for the required core demonstration; document PDF as pending if not accepted.
-4. **Prove the flow:** repeat the three-file pilot in [#30](https://github.com/241443Mooks/chug/issues/30), then run a small blinded reference-matching check with answer-key hints removed from source files and metadata ([#31](https://github.com/241443Mooks/chug/issues/31)). Keep hashes, chosen-reference evidence, findings, no-match reasons, restart and duplicate results.
-5. **Browser and package:** finish the relevant local/private and public read-only checks from [#9](https://github.com/241443Mooks/chug/issues/9); check the ZIP from a fresh extract; conduct human creative review; give final explicit go/no-go.
+1. **Core integrated:** #33 and #25 were combined and merged through [PR #37](https://github.com/241443Mooks/chug/pull/37). Automatic reference selection, provisional NDA/order comparison, persisted intake queue and per-finding/contract review work together. Main validation passed.
+2. **Local technical checks complete:** 97 Python and 34 UI tests passed in the integration run; baseline routes 6/6, critical adversarial cases surfaced 11/11, overall adversarial route agreement 14/16. Desktop/mobile private and local public-static browser checks passed. This is not owner acceptance or deployed-site verification.
+3. **Small matching exercise recorded:** the three-document HTTP pilot passed; ten blinded fixtures produced 5 correct matches, 2 correct abstentions, no wrong matches and 3 unnecessary abstentions. The key was agent-authored. Broader order matching and independent human annotation remain open, with limits recorded rather than hidden.
+4. **Owner review next:** follow [OWNER_REVIEW.md](OWNER_REVIEW.md), record actual feedback and fix submission blockers. Finish the explanation of deterministic functionality, optional AI and live-verification status.
+5. **Package after acceptance:** reconcile packaging PR #36 with the final candidate, inspect archive contents, fresh-extract and run the documented journey, record its checksum, then seek the owner's final readiness decision. PDF #27 remains deferred.
 
 ### Minimum acceptance scenarios
 
-- [ ] Exact NDA automatically selects the appropriate Active NDA reference; comparison reports no differences; human action stays pending.
-- [ ] Changed NDA automatically selects the appropriate NDA reference; altered wording is evidenced and available for human review.
-- [ ] Exact customer order automatically selects the appropriate Active order reference; comparison reports no differences; human action stays pending.
-- [ ] Changed customer order automatically selects the appropriate order reference; altered commercial terms are evidenced and available for human review.
-- [ ] Ambiguous, unsupported or inapplicable document abstains with a helpful reason; comparison is `not_run`, not falsely complete.
-- [ ] Repeat and restart preserve immutable originals, hashes, reference bindings and review states; critical T03/T04/T05 safeguards continue to pass.
-- [ ] Small *blinded* NDA/order matching sample records correct proposals, correct abstentions, wrong proposals and unnecessary abstentions against a withheld answer key.
-- [ ] Local/private reviewer actions persist correctly; the publicly accessible demo cannot save decisions or accept uploads.
+Checked boxes below mean observed technical behaviour in the merged integration, not completed owner review. Owner feedback remains in [the owner guide](OWNER_REVIEW.md).
+
+- [x] Exact NDA automatically selects the appropriate Active NDA reference; comparison reports no differences; human action stays pending.
+- [x] Changed NDA automatically selects the appropriate NDA reference; altered wording is evidenced and available for human review.
+- [x] Exact customer order automatically selects the appropriate Active order reference; comparison reports no differences; human action stays pending.
+- [x] Changed customer order automatically selects the appropriate order reference; altered commercial terms are evidenced and available for human review.
+- [x] Ambiguous, unsupported or inapplicable document abstains with a helpful reason; comparison is `not_run`, not falsely complete.
+- [x] Repeat and restart preserve immutable originals, hashes, reference bindings and review states; critical T03/T04/T05 safeguards continue to pass.
+- [x] Small *blinded* NDA/order matching sample records correct proposals, correct abstentions, wrong proposals and unnecessary abstentions against a withheld answer key.
+- [x] Local/private reviewer actions persist correctly; the local public-static export exposes no save forms or upload controls and made zero POST requests during the rendered check. The deployed website was not verified in that run.
 - [ ] A fresh-extracted submission ZIP runs as documented and contains no secrets, credentials or private records; its SHA-256 is recorded.
 - [ ] Genuine AI use, live verification status, privacy implications and non-AI baseline are represented accurately without inventing legal validation or time savings.
 
@@ -38,7 +40,7 @@ PortSwigger's application task requests **a single zipped file** showing how AI 
 
 **Stop rule:** five honest demonstrations, preserved evidence and human oversight, passing critical safety checks, truthful limitations, a usable local walkthrough and a verified ZIP. Do not extend the implementation solely to eliminate every future-product issue. A reported limitation is preferable to a misleading claim of completion.
 
-**Integration checkpoint, 19 October 2026:** #33 and #25 are combined on a separate draft integration branch. The three-document HTTP pilot and local private/public rendered checks pass; the blinded fixture check records 5 correct matches, 2 correct abstentions, no wrong matches and 3 unnecessary abstentions. See [the integration report](INTEGRATED_REVIEW_ACCEPTANCE.md). PDF #27, broader matching, human creative acceptance and ZIP packaging remain pending. No main-branch merge or deployment is implied.
+**Integration checkpoint, 19 October 2026:** #37 is merged at `477737d`; [the integration report](INTEGRATED_REVIEW_ACCEPTANCE.md) preserves the dated pre-merge results. PDF #27, broader matching, owner creative acceptance, final AI explanation and ZIP packaging remain pending. A merge does not verify a Cloudflare deployment.
 
 ## Reviewer experience
 - [ ] Start with a short `START_HERE.md` explaining the problem, approach, why conventional engineering handles much of it, and where the genuine AI contribution earns its place.
