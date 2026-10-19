@@ -88,7 +88,7 @@ class CustomerOrderReviewIntegrationTests(unittest.TestCase):
         self.assertEqual(forced["comparison"]["status"], "not_run")
 
         missing_context = self.service.prepare(extract_file(UNCLEAR_ORDER))
-        self.assertEqual(missing_context["applicability"]["status"], "needs_context")
+        self.assertEqual(missing_context["applicability"]["status"], "no_suitable_match")
         self.assertEqual(missing_context["eligible_candidates"], [])
         self.assertEqual(missing_context["comparison"]["status"], "not_run")
 

@@ -219,7 +219,8 @@
     {
       "sha256": "2c9ab77e5256c2cd1a964955d97ab8f002fee40c26c61c2f23bae56da707e817",
       "filename": "REF-001-approved-mutual-nda.docx",
-      "kind": "bundled"
+      "kind": "bundled",
+      "family": "nda"
     }
   ]
 }

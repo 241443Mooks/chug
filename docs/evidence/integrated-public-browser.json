@@ -1,0 +1,15 @@
+{
+  "browser": "153.0.8010.0",
+  "environment": "local static export at simulated public hostname; not deployed website",
+  "viewports": [
+    "1440x1000",
+    "390x844"
+  ],
+  "checks": [
+    "T05 direct link -> second finding -> example assessments -> back -> example contract outcomes -> full comparison -> refresh",
+    "no visible forms or upload controls; zero POST requests",
+    "no horizontal overflow at 390px"
+  ],
+  "errors": [],
+  "posts": []
+}

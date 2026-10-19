@@ -19,7 +19,8 @@ from .ai import AIService, AIUnavailable
 from .document import extract
 from .nda_pack import NDAPack
 from .customer_order_review import CustomerOrderReview
-from .ledger import IntakeConfirmationLedger, KnowledgeLedger, Ledger
+from .customer_order_pack import CustomerOrderPack
+from .ledger import FindingAssessmentLedger, ReviewFlagLedger, IntakeConfirmationLedger, KnowledgeLedger, Ledger
 from .corrections import CorrectionLedger
 from .reference_registry import load_registry, propose_reference, uploaded_reference_metadata
 
@@ -65,6 +66,8 @@ class App:
                         raise ValueError("Upload recovery required: reference binding is unavailable or duplicated")
                     self.contracts[binding["id"]] = {"document": document, "path": path, "reference_sha256": binding["reference_sha256"]}
         self.ledger = Ledger(state_dir / "decisions.jsonl")
+        self.finding_assessments = FindingAssessmentLedger(state_dir / "finding-assessments.jsonl")
+        self.review_flags = ReviewFlagLedger(state_dir / "review-flags.jsonl")
         self.intake_confirmations = IntakeConfirmationLedger(state_dir / "intake_confirmations.jsonl")
         self.intake_confirmations.all()
         self.knowledge = KnowledgeLedger(state_dir / "knowledge.jsonl")
@@ -266,24 +269,66 @@ class App:
             self._validate_extracted_document(data, document, filename)
             self.intakes[digest] = {"document": document, "path": path, "record": record}
 
-    def intake(self, data, filename):
+    def intake(self, data, filename, selected_reference_id=None, reviewer=None, rationale=None):
         if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
             raise ValueError("Choose one synthetic DOCX under 2 MB")
         document = extract(data, filename)
-        return self.intake_extracted(data, document)
+        return self.intake_extracted(data, document, selected_reference_id, reviewer, rationale)
 
-    def intake_extracted(self, data, document):
+    def intake_batch(self, files):
+        """Run each supplied source through the same automatic intake pipeline."""
+        files = list(files)
+        if not 1 <= len(files) <= 20:
+            raise ValueError("Choose 1 to 20 DOCX files per batch")
+        results = []
+        counts = {"analysed": 0, "awaiting_reference": 0, "blocked_extraction": 0, "duplicate": 0, "failed": 0}
+        for filename, data in files:
+            digest = hashlib.sha256(data).hexdigest() if isinstance(data, bytes) else None
+            duplicate = digest in self.intakes
+            try:
+                detail = self.intake(data, filename)
+                outcome = "duplicate" if duplicate else ("analysed" if detail["comparison"]["status"] in {"analysed", "complete"} else detail["status"])
+                if outcome not in counts:
+                    outcome = "awaiting_reference"
+                results.append({"filename": filename, "sha256": digest, "id": detail["id"], "outcome": outcome, "family": detail["family"], "reference_id": detail["reference"]["reference_id"], "comparison_status": detail["comparison"]["status"], "reason": detail["reason"]})
+            except ValueError as exc:
+                outcome = "failed"
+                results.append({"filename": filename, "sha256": digest, "outcome": outcome, "reason": str(exc)})
+            counts[outcome] += 1
+        return {"submitted": len(files), "counts": counts, "items": results}
+
+    def intake_extracted(self, data, document, selected_reference_id=None, reviewer=None, rationale=None):
         document = self._validate_extracted_document(data, document, document.get("filename") if isinstance(document, dict) else None)
         digest = document["sha256"]
         existing = self.intakes.get(digest)
         if existing:
             if hashlib.sha256(existing["path"].read_bytes()).hexdigest() != digest:
                 raise ValueError("Stored incoming original is unavailable or changed")
-            return self.intake_detail(digest)
+            detail = self.intake_detail(digest)
+            if selected_reference_id and detail["reference"]["reference_id"] != selected_reference_id:
+                raise ValueError("This original is already bound to a different reference; its review cannot be silently changed")
+            return detail
 
+        selected_item = None
+        if selected_reference_id:
+            selected_item = self.reference_library.get(selected_reference_id)
+            if not selected_item or selected_item["metadata"].get("status") != "active" or self._library_source_integrity(selected_item) != "verified":
+                raise ValueError("Choose an Active reference with a verified original")
+            if not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(rationale, str) or not rationale.strip():
+                raise ValueError("Name the reviewer and explain why this reference applies")
+            if len(reviewer) > 100 or len(rationale) > 2000:
+                raise ValueError("Reviewer name or applicability reason is too long")
+
+        if selected_item:
+            chosen = {**selected_item["metadata"], "document": selected_item["document"]}
+            selection = propose_reference(document, [chosen], eligible_statuses={"active"})
+            if selection["status"] not in {"proposed", "proposed_with_gaps"} or selection.get("proposal", {}).get("reference_id") != selected_reference_id:
+                raise ValueError("Selected reference does not match the extracted family and applicability context: " + selection["reason"])
         # Reuse the established family-aware #7 proposal and retain its immutable source snapshot.
         matching = self.match_reference_extracted(data, document)
         matching = {key: value for key, value in matching.items() if key != "extracted_document"}
+        if selected_item:
+            matching = {**matching, "proposal": selection, "selection_mode": "explicit_on_upload"}
         proposal = matching["proposal"]
         family = (proposal.get("context", {}).get("dimensions", {}).get("family", {}) or {}).get("value")
         candidate = proposal.get("proposal") or {}
@@ -296,16 +341,25 @@ class App:
             status, route, reason = "blocked_extraction", "blocked_extraction", "; ".join(document["coverage"]["issues"])
             comparison = {"status": "not_run", "reason": "Extraction is incomplete; comparison was not performed."}
         elif proposal.get("status") in {"proposed", "proposed_with_gaps"} and family == "customer_order":
-            status, route = "awaiting_reference", "review_required"
-            reason = "Customer-order reference applicability needs explicit reviewer confirmation before comparison."
-        elif proposal.get("status") == "proposed" and family == "nda" and candidate.get("sha256") in self.references:
+            library_item = self.reference_library.get(candidate.get("reference_id"))
+            if library_item and library_item["metadata"].get("status") == "active" and self._library_source_integrity(library_item) == "verified" and library_item["metadata"]["sha256"] == candidate.get("sha256"):
+                reference_record = {**library_item["metadata"], "document": library_item["document"]}
+                report = CustomerOrderPack().compare(reference_record, document)
+                if report["checks"]["comparison"] == "complete":
+                    comparison = {"status": "complete", "method": "deterministic section and text comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "observations": [CustomerOrderReview._observation(finding) for finding in report["findings"]], "reason": report["reason"], "route": report["route"], "limitations": report.get("assurance", {}).get("limitations", []), "provisional": True, "human_decision_required": True, "approved": False}
+                    status, route, reason = "analysed_needs_review", "review_required", "Chug selected a context-compatible customer-order reference and compared it on upload. Check the proposed reference and findings before deciding."
+                else:
+                    status, route, reason = "awaiting_reference", "review_required", "The proposed customer-order comparison did not complete; review the reference and source."
+            else:
+                status, route, reason = "awaiting_reference", "review_required", "The proposed customer-order reference is not Active or its original could not be verified."
+        elif proposal.get("status") in {"proposed", "proposed_with_gaps"} and family == "nda" and candidate.get("sha256") in self.references:
             library_item = self.reference_library.get(candidate.get("reference_id"))
             if library_item and library_item["kind"] == "uploaded_synthetic" and library_item["metadata"].get("status") == "active" and self._library_source_integrity(library_item) == "verified":
                 reference = self.references[candidate["sha256"]]["document"]
                 comparison_report = self.pack.analyse(reference, document, {}, {}, [], self.reference)
                 analysis = comparison_report
-                comparison = {"status": "analysed", "method": "deterministic NDA comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "findings": comparison_report["findings"], "route": comparison_report["route"], "reason": comparison_report["reason"], "limitations": comparison_report["assurance"].get("limitations", [])}
-                status, route, reason = "analysed_needs_review", "review_required", "Provisional comparison is complete; a person must confirm reference applicability and decide the contract."
+                comparison = {"status": "analysed", "method": "deterministic NDA comparison", "reference_id": candidate["reference_id"], "reference_sha256": candidate["sha256"], "findings": comparison_report["findings"], "route": comparison_report["route"], "reason": comparison_report["reason"], "limitations": comparison_report["assurance"].get("limitations", []), "provisional": True, "human_decision_required": True, "approved": False}
+                status, route, reason = "analysed_needs_review", "review_required", "Chug selected a context-compatible NDA reference and compared it on upload. Check the proposed reference and findings before deciding."
             else:
                 status, route = "awaiting_reference", "review_required"
                 reason = "The proposed NDA reference is not an active, integrity-verified local standard; comparison was not run."
@@ -341,6 +395,8 @@ class App:
             json.dump(stored_record, handle, ensure_ascii=False); handle.flush(); os.fsync(handle.fileno())
         os.replace(temporary, meta)
         self.intakes[digest] = {"document": document, "path": original, "record": record}
+        if selected_item:
+            return self.confirm_intake_reference(digest, selected_reference_id, selected_item["metadata"]["sha256"], reviewer, rationale)
         return self.intake_detail(digest)
 
     def intake_detail(self, digest):
@@ -373,10 +429,22 @@ class App:
                 reference_integrity = "verified" if hashlib.sha256(reference_item["path"].read_bytes()).hexdigest() == reference_sha256 else "mismatch"
             except OSError:
                 reference_integrity = "unavailable"
-        decisions = [event for event in self.ledger.all(digest) if event.get("reference_sha256") == reference_sha256]
-        if decisions:
-            record["human_decision"] = {"status": "recorded", "required": True, "outcome": decisions[-1]["decision"], "events": len(decisions), "last_decision": decisions[-1]}
-        return {**record, "id": "I-" + digest[:10], "document": item["document"], "source_integrity": {"incoming": "verified", "reference": reference_integrity}, "original_url": "/api/intakes/" + digest + "/original"}
+        review = self._review_records(digest, reference_sha256)
+        decisions = review["decisions"]
+        record["human_decision"] = {
+            "status": "recorded" if review["latest_decision"] else "pending",
+            "required": True, "outcome": review["latest_decision"]["decision"] if review["latest_decision"] else None,
+            "events": len(decisions), "history": decisions, "last_decision": review["latest_decision"]}
+        record["review_state"] = review["review_state"]
+        record["latest_flag"] = review["latest_flag"]
+        record["contract_actions"] = review["contract_actions"]
+        case_id = "I-" + digest[:10]
+        assessments = self.finding_assessments.all(case_id)
+        latest_assessments = {}
+        for assessment in assessments:
+            latest_assessments[assessment["finding_id"]] = assessment
+        reference_document = self.reference_library[reference_id]["document"] if reference_integrity == "verified" and reference_id in self.reference_library else None
+        return {**record, "id": case_id, "document": item["document"], "reference_document": reference_document, "source_integrity": {"incoming": "verified", "reference": reference_integrity}, "original_url": "/api/intakes/" + digest + "/original", "finding_assessments": assessments, "latest_finding_assessments": latest_assessments}
 
     def confirm_intake_reference(self, digest, reference_id, reference_sha256, reviewer, rationale):
         detail = self.intake_detail(digest)
@@ -395,15 +463,12 @@ class App:
         confirmation = {"confirmed": True, "reference_id": reference_id, "sha256": reference_sha256, "reviewer": reviewer, "rationale": rationale, "timestamp": stamp}
         analysis = None
         if detail["family"] == "customer_order":
-            service = CustomerOrderReview(self.root)
             reference_record = {**library_item["metadata"], "document": library_item["document"]}
-            service.references.append(reference_record)
-            service.order_references[reference_id] = reference_record
-            compared = service.compare(detail["document"], reference_id, confirmation)
-            if compared.get("reference_confirmation", {}).get("status") != "confirmed":
-                raise ValueError(compared.get("routing", {}).get("reason", "Customer-order comparison could not confirm the selected baseline"))
-            raw = compared["comparison"]
-            comparison = {"status": raw["status"], "method": raw.get("method"), "baseline": raw.get("baseline"), "observations": raw.get("observations", []), "reason": compared["routing"].get("reason"), "route": compared["routing"].get("route"), "limitations": raw.get("assurance", {}).get("limitations", []), "human_decision_required": True, "approved": False}
+            report = CustomerOrderPack().compare(reference_record, detail["document"])
+            if report["checks"]["comparison"] != "complete":
+                raise ValueError("Customer-order comparison did not complete")
+            observations = [CustomerOrderReview._observation(finding) for finding in report["findings"]]
+            comparison = {"status": "complete", "method": "deterministic section and text comparison", "baseline": report["baseline"], "observations": observations, "reason": report["reason"], "route": report["route"], "limitations": report.get("assurance", {}).get("limitations", []), "human_decision_required": True, "approved": False}
         elif detail["family"] == "nda":
             reference = self.references.get(reference_sha256)
             if not reference:
@@ -415,13 +480,20 @@ class App:
         event = self.intake_confirmations.append(digest, detail["incoming"]["filename"], reference_id, reference_sha256, reviewer, rationale, comparison, analysis)
         return self.intake_detail(digest)
 
-    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None, independent_original_reviewed=False):
+    def record_intake_decision(self, digest, reviewer, decision, rationale, conditions="", finding_ids=None, independent_original_reviewed=False, contract_action=None, unresolved_findings_acknowledged=False):
         detail = self.intake_detail(digest)
         if decision == "approve" and independent_original_reviewed is not True:
             raise ValueError("Before recording approval, confirm that you independently reviewed the exact incoming original document")
         findings = list((detail.get("analysis") or {}).get("findings", [])) or list(detail.get("comparison", {}).get("findings", []))
         observations = detail.get("comparison", {}).get("observations", [])
         findings.extend(observations)
+        if decision == "approve":
+            unresolved = [finding for finding in findings if
+                          detail["latest_finding_assessments"].get(finding.get("id"), {}).get("assessment")
+                          not in {"not_relevant", "acceptable"}]
+            if unresolved and (unresolved_findings_acknowledged is not True or
+                               not isinstance(rationale, str) or len(rationale.strip()) < 20):
+                raise ValueError("Acknowledge unresolved findings and explain acceptance before approval")
         by_id = {row.get("id"): row for row in findings}
         finding_ids = finding_ids or []
         if not isinstance(finding_ids, list) or any(item not in by_id for item in finding_ids):
@@ -433,17 +505,35 @@ class App:
             for passage in incoming:
                 sources.append({"finding_id": finding_id, "anchor": passage["anchor"], "text": passage["text"]})
         reference_sha256 = detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")
-        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256, independent_original_reviewed)
+        return self.ledger.append(digest, detail["incoming"]["filename"], reviewer, decision, rationale, finding_ids, conditions, sources, reference_sha256, independent_original_reviewed, contract_action, unresolved_findings_acknowledged)
+
+    def _review_records(self, sha256, reference_sha256, *, legacy=False):
+        """Preserve historical ledger bytes while treating earlier mislabeled flags as pending."""
+        default_reference = self.bundled_reference_sha256 if legacy else None
+        events = [event for event in self.ledger.all(sha256)
+                  if event.get("reference_sha256", default_reference) == reference_sha256]
+        decisions = [event for event in events if event.get("contract_action") != "flag_for_review"]
+        flagged = [event for event in events if event.get("contract_action") == "flag_for_review"]
+        flagged.extend(event for event in self.review_flags.all(sha256)
+                       if event.get("reference_sha256") == reference_sha256)
+        flags = sorted(flagged, key=lambda event: event["timestamp"])
+        actions = sorted([event for event in decisions if event.get("contract_action")] + flags,
+                         key=lambda event: event["timestamp"])
+        last_decision = decisions[-1] if decisions else None
+        last_flag = flags[-1] if flags else None
+        pending_flag = bool(last_flag and (not last_decision or last_flag["timestamp"] > last_decision["timestamp"]))
+        return {"decisions": decisions, "contract_actions": actions,
+                "latest_decision": None if pending_flag else last_decision,
+                "latest_flag": last_flag if pending_flag else None,
+                "review_state": "flagged" if pending_flag else "decided" if last_decision else "pending"}
 
     def queue(self):
-        latest = {}
-        for event in self.ledger.all():
-            latest[(event["sha256"], event.get("reference_sha256", self.bundled_reference_sha256))] = event
         rows = []
         for document_id, item in self.contracts.items():
             document = item["document"]
             review = self.analysis(document_id)
-            rows.append({"id": document_id, "filename": document["filename"], "display_name": self.pack.display_name(document), "sha256": document["sha256"], "reference_sha256": item["reference_sha256"], "route": review["route"], "reason": review["reason"], "findings_count": len(review["findings"]), "latest_decision": latest.get((document["sha256"], item["reference_sha256"]))})
+            human = self._review_records(document["sha256"], item["reference_sha256"], legacy=True)
+            rows.append({"id": document_id, "filename": document["filename"], "display_name": self.pack.display_name(document), "sha256": document["sha256"], "reference_sha256": item["reference_sha256"], "route": review["route"], "reason": review["reason"], "findings_count": len(review["findings"]), "latest_decision": human["latest_decision"], "latest_flag": human["latest_flag"], "review_state": human["review_state"]})
         for digest, item in self.intakes.items():
             detail = self.intake_detail(digest)
             record = detail
@@ -452,7 +542,7 @@ class App:
             else:
                 findings_count = len(record.get("comparison", {}).get("findings", record.get("comparison", {}).get("observations", [])))
             reference_sha256 = record.get("reference_confirmation", {}).get("sha256") or record.get("reference", {}).get("sha256")
-            rows.append({"id": "I-" + digest[:10], "intake_sha256": digest, "filename": item["document"]["filename"], "display_name": Path(item["document"]["filename"]).stem, "sha256": digest, "reference_sha256": reference_sha256, "route": record["route"], "reason": record["reason"], "findings_count": findings_count, "latest_decision": record.get("human_decision", {}).get("last_decision"), "intake": True, "status": record["status"]})
+            rows.append({"id": "I-" + digest[:10], "intake_sha256": digest, "filename": item["document"]["filename"], "display_name": Path(item["document"]["filename"]).stem, "sha256": digest, "reference_sha256": reference_sha256, "route": record["route"], "reason": record["reason"], "findings_count": findings_count, "latest_decision": record.get("human_decision", {}).get("last_decision"), "latest_flag": record["latest_flag"], "review_state": record["review_state"], "intake": True, "status": record["status"]})
         return sorted(rows, key=lambda row: (-self.pack.route_order[row["route"]], row["id"]))
 
     def match_reference(self, data, filename):
@@ -639,7 +729,9 @@ class App:
         if classification["family"] == "nda":
             self._validate_reference(document)
         digest = document["sha256"]
-        existing = next((item for item in self.reference_library.values() if item["metadata"]["sha256"] == digest), None)
+        # Research specimens are visible examples, not controlled registrations.
+        # A deliberate upload of the same bytes creates a separate Active record.
+        existing = next((item for item in self.reference_library.values() if item["metadata"]["sha256"] == digest and item["kind"] == "uploaded_synthetic"), None)
         if existing:
             if self._library_source_integrity(existing) != "verified":
                 raise ValueError("Stored reference original is unavailable or changed; upload is blocked")
@@ -825,7 +917,8 @@ class App:
         item = self.contracts[document_id]
         document = item["document"]
         reference_sha256 = item["reference_sha256"]
-        history = [event for event in self.ledger.all(document["sha256"]) if event.get("reference_sha256", self.bundled_reference_sha256) == reference_sha256]
+        review_records = self._review_records(document["sha256"], reference_sha256, legacy=True)
+        history = review_records["decisions"]
         knowledge_events = self.knowledge.all()
         publications = []
         for event in knowledge_events:
@@ -834,8 +927,89 @@ class App:
             withdrawal = next((row for row in knowledge_events if row["type"] == "withdraw" and row["publication_id"] == event["id"]), None)
             publications.append({**event, "status": "withdrawn" if withdrawal else "active", "withdrawal": withdrawal})
         analysis = self.analysis(document_id)
-        analysis["assurance"]["human_review"] = {"status": "recorded" if history else "not recorded", "last_decision": history[-1]["decision"] if history else None, "events": len(history)}
-        return {"id": document_id, "display_name": self.pack.display_name(document), "document": document, "reference": self.references[reference_sha256]["document"], "reference_kind": self.references[reference_sha256]["kind"], "analysis": analysis, "history": history, "publications": publications, "corrections": self.correction_history(document_id), "ai": self.ai.status(), "ai_results": self.ai_results.get((document["sha256"], reference_sha256), [])}
+        assessment_events = self.finding_assessments.all(document_id)
+        latest_assessments = {}
+        for assessment in assessment_events:
+            latest_assessments[assessment["finding_id"]] = assessment
+        analysis["assurance"]["human_review"] = {"status": "recorded" if review_records["latest_decision"] else "not recorded", "last_decision": review_records["latest_decision"]["decision"] if review_records["latest_decision"] else None, "events": len(history)}
+        contract_actions = review_records["contract_actions"]
+        analysis["assessments"] = latest_assessments
+        analysis["contract_actions"] = contract_actions
+        return {"id": document_id, "display_name": self.pack.display_name(document), "document": document, "reference": self.references[reference_sha256]["document"], "reference_kind": self.references[reference_sha256]["kind"], "analysis": analysis, "history": history, "finding_assessments": assessment_events, "latest_finding_assessments": latest_assessments, "contract_actions": contract_actions, "review_state": review_records["review_state"], "latest_flag": review_records["latest_flag"], "publications": publications, "corrections": self.correction_history(document_id), "ai": self.ai.status(), "ai_results": self.ai_results.get((document["sha256"], reference_sha256), [])}
+
+    def assess_finding(self, document_id, finding_id, assessment, reviewer, reason):
+        if document_id in self.contracts:
+            detail = self.detail(document_id)
+            rows = detail["analysis"]["findings"]
+            reference = detail["reference"]
+            source_hash = detail["document"]["sha256"]
+        else:
+            digest = next((key for key in self.intakes if document_id == "I-" + key[:10]), None)
+            if not digest:
+                raise KeyError("Review case not found")
+            detail = self.intake_detail(digest)
+            if detail["source_integrity"]["incoming"] != "verified" or detail["source_integrity"]["reference"] != "verified":
+                raise ValueError("Incoming or reference original is not verified; assessment is unavailable")
+            rows = list((detail.get("analysis") or {}).get("findings", [])) or list(detail.get("comparison", {}).get("findings", [])) or list(detail.get("comparison", {}).get("observations", []))
+            reference = {"reference_id": detail.get("reference_confirmation", {}).get("reference_id") or detail.get("reference", {}).get("reference_id"), "sha256": detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")}
+            source_hash = digest
+        finding = next((row for row in rows if row.get("id") == finding_id), None)
+        if not finding:
+            raise ValueError("Unknown finding reference")
+        passages = finding.get("sources", finding.get("incoming_passages", []))
+        ref_evidence = finding.get("reference_passages") or finding.get("reference") or finding.get("baseline") or finding.get("reference_passage")
+        if not passages and not ref_evidence:
+            raise ValueError("This observation has no source passages to assess")
+        evidence = {"title": finding.get("title") or finding.get("summary", "Observed difference"),
+                    "explanation": finding.get("explanation") or finding.get("reason", ""),
+                    "sources": passages, "reference": ref_evidence}
+        ref = reference
+        return self.finding_assessments.append(case_id=document_id, finding_id=finding_id,
+            assessment=assessment, reviewer=reviewer, reason=reason,
+            source_sha256=source_hash, reference_id=ref.get("reference_id") or ref.get("filename"), reference_sha256=ref["sha256"], evidence=evidence)
+
+    def record_contract_action(self, document_id, action, reviewer, rationale,
+                               independent_original_reviewed=False, unresolved_findings_acknowledged=False):
+        if action not in {"accept_contract", "flag_for_review"}:
+            raise ValueError("Choose Accept contract or Flag for further review")
+        if document_id in self.contracts:
+            detail = self.detail(document_id)
+            source_sha256 = detail["document"]["sha256"]
+            filename = detail["document"]["filename"]
+            reference_sha256 = detail["reference"]["sha256"]
+            findings = detail["analysis"]["findings"]
+        else:
+            digest = next((key for key in self.intakes if document_id == "I-" + key[:10]), None)
+            if not digest:
+                raise KeyError("Review case not found")
+            detail = self.intake_detail(digest)
+            source_sha256 = digest
+            filename = detail["incoming"]["filename"]
+            reference_sha256 = detail.get("reference_confirmation", {}).get("sha256") or detail.get("reference", {}).get("sha256")
+            findings = (detail.get("analysis") or {}).get("findings") or detail.get("comparison", {}).get("findings") or detail.get("comparison", {}).get("observations", [])
+        if action == "flag_for_review":
+            prior = self._review_records(source_sha256, reference_sha256, legacy=document_id in self.contracts)
+            return self.review_flags.append(sha256=source_sha256, filename=filename, reviewer=reviewer,
+                                            rationale=rationale, reference_sha256=reference_sha256,
+                                            reuse_last_if_same=prior["review_state"] == "flagged")
+        if independent_original_reviewed is not True:
+            raise ValueError("Before accepting, confirm that you independently reviewed the exact incoming original document")
+        assessments = detail.get("latest_finding_assessments", {})
+        unresolved = [row for row in findings
+                      if assessments.get(row.get("id"), {}).get("assessment") not in {"not_relevant", "acceptable"}]
+        if unresolved:
+            if unresolved_findings_acknowledged is not True:
+                raise ValueError("Acknowledge each unresolved or unassessed finding before accepting")
+            if not isinstance(rationale, str) or len(rationale.strip()) < 20:
+                raise ValueError("Explain why you accept despite unresolved or unassessed findings")
+        if document_id not in self.contracts:
+            return self.record_intake_decision(digest, reviewer, "approve", rationale,
+                finding_ids=[], independent_original_reviewed=True, contract_action="accept_contract",
+                unresolved_findings_acknowledged=unresolved_findings_acknowledged)
+        return self.ledger.append(source_sha256, filename, reviewer, "approve", rationale, [],
+                                  reference_sha256=reference_sha256, independent_original_reviewed=True,
+                                  contract_action="accept_contract",
+                                  unresolved_findings_acknowledged=unresolved_findings_acknowledged)
 
     def upload(self, data, filename):
         if not isinstance(filename, str) or not filename.lower().endswith(".docx") or len(data) > 2_000_000:
@@ -903,19 +1077,40 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Request size is missing or exceeds the local limit")
         return self.rfile.read(length)
 
-    def _multipart_docx(self):
+    def _multipart_docx(self, with_fields=False):
         content_type = self.headers.get("Content-Type", "")
         if not content_type.startswith("multipart/form-data;"):
             raise ValueError("Choose a DOCX file")
         data = self._body()
         message = BytesParser(policy=policy.default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode() + b"\r\n\r\n" + data)
-        files = [part for part in message.iter_parts() if part.get_param("name", header="content-disposition") == "file"] if message.is_multipart() else []
+        parts = list(message.iter_parts()) if message.is_multipart() else []
+        files = [part for part in parts if part.get_param("name", header="content-disposition") == "file"]
         if len(files) != 1:
             raise ValueError("Choose one DOCX file")
         filename = files[0].get_filename() or "uploaded.docx"
         if not filename.lower().endswith(".docx"):
             raise ValueError("DOCX only")
+        if with_fields:
+            fields = {}
+            for part in parts:
+                name = part.get_param("name", header="content-disposition")
+                if name != "file":
+                    if name in fields or name not in {"reference_id", "reviewer", "rationale"}:
+                        raise ValueError("Unknown or repeated upload field")
+                    fields[name] = part.get_content()
+            return files[0].get_payload(decode=True), filename, fields
         return files[0].get_payload(decode=True), filename
+
+    def _multipart_batch(self):
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data;"):
+            raise ValueError("Choose a DOCX batch")
+        data = self._body(42_000_000)
+        message = BytesParser(policy=policy.default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode() + b"\r\n\r\n" + data)
+        parts = list(message.iter_parts()) if message.is_multipart() else []
+        if not 1 <= len(parts) <= 20 or any(part.get_param("name", header="content-disposition") != "file" for part in parts):
+            raise ValueError("Choose 1 to 20 DOCX files per batch")
+        return [(part.get_filename() or "uploaded.docx", part.get_payload(decode=True)) for part in parts]
 
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
@@ -1085,8 +1280,10 @@ class Handler(BaseHTTPRequestHandler):
                 data, filename = self._multipart_docx()
                 return self._json({"id": self.app.upload(data, filename)}, 201)
             if path == "/api/intakes":
-                data, filename = self._multipart_docx()
-                return self._json(self.app.intake(data, filename), 201)
+                data, filename, fields = self._multipart_docx(with_fields=True)
+                return self._json(self.app.intake(data, filename, fields.get("reference_id"), fields.get("reviewer"), fields.get("rationale")), 201)
+            if path == "/api/intakes/batch":
+                return self._json(self.app.intake_batch(self._multipart_batch()), 201)
             if path == "/api/reference-matches":
                 data, filename = self._multipart_docx()
                 return self._json(self.app.match_reference(data, filename), 201)
@@ -1096,6 +1293,22 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self._body(100_000))
             if not isinstance(body, dict):
                 raise ValueError("Expected a JSON object")
+            if path == "/api/finding-assessments":
+                document_id = body.get("document_id")
+                if not isinstance(document_id, str):
+                    raise ValueError("Invalid contract ID")
+                event = self.app.assess_finding(document_id, body.get("finding_id"),
+                    body.get("assessment"), body.get("reviewer", ""), body.get("reason", ""))
+                return self._json(event, 201)
+            if path == "/api/contract-actions":
+                document_id = body.get("document_id")
+                if not isinstance(document_id, str):
+                    raise ValueError("Invalid contract ID")
+                event = self.app.record_contract_action(document_id, body.get("action"),
+                    body.get("reviewer", ""), body.get("rationale", ""),
+                    body.get("independent_original_reviewed", False),
+                    body.get("unresolved_findings_acknowledged", False))
+                return self._json(event, 201)
             reference_confirmation = re.fullmatch(r"/api/intakes/([0-9a-f]{64})/reference-confirmation", path)
             if reference_confirmation:
                 return self._json(self.app.confirm_intake_reference(reference_confirmation.group(1), body.get("reference_id"), body.get("reference_sha256"), body.get("reviewer", ""), body.get("rationale", "")), 201)
@@ -1135,7 +1348,16 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Unknown finding reference")
                 doc = detail["document"]
                 considered_sources = [{"finding_id": finding["id"], "anchor": source["anchor"], "text": source["text"]} for finding in detail["analysis"]["findings"] if finding["id"] in finding_ids for source in finding["sources"]]
-                event = self.app.ledger.append(doc["sha256"], doc["filename"], body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), finding_ids, body.get("conditions", ""), considered_sources, detail["reference"]["sha256"])
+                if body.get("decision") == "approve":
+                    if body.get("independent_original_reviewed") is not True:
+                        raise ValueError("Confirm independent review of the original before approval")
+                    unresolved = [finding for finding in detail["analysis"]["findings"]
+                                  if detail["latest_finding_assessments"].get(finding["id"], {}).get("assessment")
+                                  not in {"not_relevant", "acceptable"}]
+                    if unresolved and (body.get("unresolved_findings_acknowledged") is not True or
+                                       not isinstance(body.get("rationale"), str) or len(body["rationale"].strip()) < 20):
+                        raise ValueError("Acknowledge unresolved findings and explain acceptance")
+                event = self.app.ledger.append(doc["sha256"], doc["filename"], body.get("reviewer", ""), body.get("decision", ""), body.get("rationale", ""), finding_ids, body.get("conditions", ""), considered_sources, detail["reference"]["sha256"], independent_original_reviewed=body.get("independent_original_reviewed") is True, unresolved_findings_acknowledged=body.get("unresolved_findings_acknowledged") is True)
                 return self._json(event, 201)
             if path == "/api/precedents":
                 if body.get("role") != "demo_legal_reviewer" or body.get("acknowledged") is not True:

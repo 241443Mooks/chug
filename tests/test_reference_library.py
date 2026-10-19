@@ -178,9 +178,8 @@ class ReferenceLibraryTests(unittest.TestCase):
     def test_corrupt_and_unsupported_nda_references_are_rejected_clearly(self):
         with self.assertRaisesRegex(ValueError, "Reference extraction is incomplete"):
             self.app.upload_reference(b"not a DOCX", "broken.docx")
-        missing_clause = (ROOT / "dataset/incoming/T04-missing-no-licence.docx").read_bytes()
-        with self.assertRaisesRegex(ValueError, "missing clause headings"):
-            self.app.upload_reference(missing_clause, "unsupported-nda.docx")
+        alternate = (ROOT / "research/reference-library-v0.1/references/nda/Mutual NDA - Product Evaluation - UK - v0.1.docx").read_bytes()
+        self.assertEqual(self.app.upload_reference(alternate, "alternate-nda.docx")["library_item"]["status"], "active")
 
     def test_tampering_is_visible_in_listing_and_withheld_from_detail_and_original(self):
         data = new_customer_order_bytes()

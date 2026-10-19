@@ -120,7 +120,7 @@ def extract_context(document: dict) -> dict:
     units = document.get("units", [])
     family_hits = []
     nda = _matches(units, r"\b(?:mutual\s+)?NDA\b|\bnon[- ]disclosure agreement\b", "NDA wording")
-    order = _matches(units, r"\bcustomer order\b|\border form\b", "customer order wording")
+    order = _matches(units, r"\bcustomer order\b|\border form\b|\border scope\b|\bpurchase of \d+ (?:desktop user|cloud scanning|managed|self[- ]hosted)", "customer order and purchase scope wording")
     if nda:
         family_hits.append(("nda", nda))
     if order:
@@ -155,9 +155,9 @@ def extract_context(document: dict) -> dict:
         reseller = _matches(units, r"\breseller\b|\bresale\b|\bthrough an? (?:authorised|authorized) reseller\b", "reseller channel wording")
         channel = _resolve([("direct", direct), ("reseller", reseller)])
 
-        hosted_cloud = _matches(units, r"\b(?:vendor[- ]hosted|managed cloud scanning|cloud scanning|DAST cloud|hosted scanning)\b", "vendor-hosted cloud service wording")
+        hosted_cloud = [e for e in _matches(units, r"\b(?:vendor[- ]hosted|managed cloud scanning|cloud scanning|DAST cloud|hosted scanning)\b", "vendor-hosted cloud service wording") if not re.search(r"\b(?:requests? to resell|fall outside this reference|not included)\b", e["text"], re.IGNORECASE)]
         self_hosted = _matches(units, r"\b(?:self[- ]hosted|customer[- ]hosted|customer operates the instance)\b", "customer-hosted deployment wording")
-        desktop = _matches(units, r"\b(?:desktop user licen[cs]es?|named desktop (?:software )?users?|desktop seats?)\b", "desktop licence scope")
+        desktop = _matches(units, r"\b(?:desktop user (?:licen[cs]es?|subscriptions?)|named desktop (?:software )?users?|desktop seats?)\b", "desktop licence scope")
         mixed = _matches(units, r"\b(?:combined order|desktop plus cloud|desktop and cloud bundle)\b", "combined desktop and cloud scope")
         deployment_values = []
         if mixed:
@@ -336,7 +336,7 @@ def propose_reference(document: dict, references: list[dict], eligible_statuses:
     return {
         **base,
         "status": status,
-        "reason": "One context-compatible reference remains. Confirm its applicability before comparison.",
+        "reason": "Chug found a context-compatible Active reference. Check that it applies to this contract." if not alternatives else "Chug selected the context-compatible reference with the strongest shared scope wording. Check that it applies to this contract.",
         "proposal": _public_candidate(item),
         "alternatives": alternatives,
         "excluded": excluded,

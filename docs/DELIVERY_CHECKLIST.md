@@ -38,7 +38,7 @@ PortSwigger's application task requests **a single zipped file** showing how AI 
 
 **Stop rule:** five honest demonstrations, preserved evidence and human oversight, passing critical safety checks, truthful limitations, a usable local walkthrough and a verified ZIP. Do not extend the implementation solely to eliminate every future-product issue. A reported limitation is preferable to a misleading claim of completion.
 
-**Status language as at 19 October 2026:** draft PRs #25, #27 and #33 have individually passed GitHub Actions validation. Their combined behaviour, rendered browser acceptance, blinded matching and ZIP packaging are **not verified**. No deployment or merge is implied by this document.
+**Integration checkpoint, 19 October 2026:** #33 and #25 are combined on a separate draft integration branch. The three-document HTTP pilot and local private/public rendered checks pass; the blinded fixture check records 5 correct matches, 2 correct abstentions, no wrong matches and 3 unnecessary abstentions. See [the integration report](INTEGRATED_REVIEW_ACCEPTANCE.md). PDF #27, broader matching, human creative acceptance and ZIP packaging remain pending. No main-branch merge or deployment is implied.
 
 ## Reviewer experience
 - [ ] Start with a short `START_HERE.md` explaining the problem, approach, why conventional engineering handles much of it, and where the genuine AI contribution earns its place.

@@ -9,6 +9,7 @@ from threading import Lock, RLock
 from uuid import uuid4
 
 DECISIONS = {"approve", "request_amendment", "reject", "escalate"}
+FINDING_ASSESSMENTS = {"not_relevant", "acceptable", "problem", "needs_further_review", "deal_breaker"}
 
 
 def _append(path, lock, event):
@@ -35,7 +36,7 @@ class Ledger:
                 events = [json.loads(line) for line in handle if line.strip()]
         return [event for event in events if event["sha256"] == sha256] if sha256 else events
 
-    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None, independent_original_reviewed=False):
+    def append(self, sha256, filename, reviewer, decision, rationale, finding_ids, conditions="", considered_sources=None, reference_sha256=None, independent_original_reviewed=False, contract_action=None, unresolved_findings_acknowledged=False):
         if not isinstance(decision, str) or decision not in DECISIONS or not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(rationale, str) or not rationale.strip() or len(reviewer) > 100 or len(rationale) > 2000 or not isinstance(conditions, str) or len(conditions) > 1000:
             raise ValueError("Choose a decision and provide reviewer name and rationale")
         if not isinstance(finding_ids, list) or any(not isinstance(item, str) for item in finding_ids):
@@ -50,8 +51,87 @@ class Ledger:
             event["reference_sha256"] = reference_sha256
         if independent_original_reviewed:
             event["independent_original_reviewed"] = True
+        if unresolved_findings_acknowledged:
+            event["unresolved_findings_acknowledged"] = True
+        if contract_action:
+            event["contract_action"] = contract_action
         _append(self.path, self.lock, event)
         return event
+
+
+class FindingAssessmentLedger:
+    """Append-only human assessments tied to exact incoming/reference evidence."""
+    def __init__(self, path: Path):
+        self.path = path
+        self.lock = RLock()
+
+    def all(self, case_id=None):
+        if not self.path.exists():
+            return []
+        with self.lock, self.path.open(encoding="utf-8") as handle:
+            events = [json.loads(line) for line in handle if line.strip()]
+        return [event for event in events if case_id is None or event["case_id"] == case_id]
+
+    def append(self, *, case_id, finding_id, assessment, reviewer, reason, source_sha256, reference_id, reference_sha256, evidence):
+        if assessment not in FINDING_ASSESSMENTS:
+            raise ValueError("Choose one of the five finding assessments")
+        if not isinstance(reviewer, str) or not reviewer.strip() or len(reviewer) > 100:
+            raise ValueError("Provide a reviewer label")
+        if not isinstance(reason, str) or len(reason) > 2000:
+            raise ValueError("Assessment notes must be 2,000 characters or fewer")
+        if assessment in {"problem", "needs_further_review", "deal_breaker"} and not reason.strip():
+            raise ValueError("Add a reason for this assessment")
+        if not isinstance(evidence, dict) or not (evidence.get("sources") or evidence.get("reference")):
+            raise ValueError("Finding evidence is unavailable")
+        with self.lock:
+            prior = [event for event in self.all(case_id) if event["finding_id"] == finding_id]
+            if prior and (prior[-1]["assessment"], prior[-1]["reviewer"], prior[-1]["reason"]) == (assessment, reviewer.strip(), reason.strip()):
+                return prior[-1]
+            event = {"id": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
+                     "case_id": case_id, "finding_id": finding_id, "assessment": assessment,
+                     "reviewer": reviewer.strip(), "reason": reason.strip(),
+                     "source_sha256": source_sha256, "reference_id": reference_id,
+                     "reference_sha256": reference_sha256, "evidence": evidence,
+                     "revision": len(prior) + 1, "supersedes": prior[-1]["id"] if prior else None}
+            _append(self.path, self.lock, event)
+            return event
+
+
+class ReviewFlagLedger:
+    """Separate pending-review events; never turn a flag into an amendment or final decision."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.lock = RLock()
+
+    def all(self, sha256=None):
+        if not self.path.exists():
+            return []
+        with self.lock, self.path.open(encoding="utf-8") as handle:
+            events = [json.loads(line) for line in handle if line.strip()]
+        return [event for event in events if sha256 is None or event["sha256"] == sha256]
+
+    def append(self, *, sha256, filename, reviewer, rationale, reference_sha256=None, reuse_last_if_same=True):
+        if not isinstance(sha256, str) or len(sha256) != 64:
+            raise ValueError("Invalid incoming source identity")
+        if reference_sha256 is not None and (not isinstance(reference_sha256, str) or len(reference_sha256) != 64):
+            raise ValueError("Invalid reference identity")
+        if not isinstance(reviewer, str) or not reviewer.strip() or len(reviewer) > 100:
+            raise ValueError("Provide a reviewer label")
+        if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:
+            raise ValueError("Explain why further review is needed")
+        with self.lock:
+            previous = [event for event in self.all(sha256)
+                        if event.get("reference_sha256") == reference_sha256]
+            if reuse_last_if_same and previous and previous[-1]["reviewer"] == reviewer.strip() and previous[-1]["rationale"] == rationale.strip():
+                return previous[-1]
+            event = {"id": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
+                     "sha256": sha256, "filename": filename, "reference_sha256": reference_sha256,
+                     "reviewer": reviewer.strip(), "rationale": rationale.strip(),
+                     "contract_action": "flag_for_review", "status": "pending",
+                     "next_action": "Further human review required"}
+            _append(self.path, self.lock, event)
+            return event
 
 
 class IntakeConfirmationLedger:

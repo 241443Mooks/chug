@@ -1,5 +1,13 @@
 # Swig — Design journal
 
+## Entry 015 — Finding assessment and contract outcome are separate acts
+
+**Observation:** Reviewers needed to judge a reported difference without that judgement silently deciding what happens to the agreement. Repeated “Open finding” links also made it easy to lose the current task.
+
+**Decision:** Give every comparison finding its own assessment history and direct review view, then present Accept contract and Flag for further review as separate whole-agreement actions. Bind assessment events to incoming and reference hashes plus an evidence snapshot. Treat public controls as examples without persistence.
+
+**Evidence and uncertainty:** Local API and UI tests cover finding identity, revisions, restart persistence, source hashes, required reasons, no-finding contract actions and static read-only examples. Full browser, assistive technology, 390 px review, customer-order and newly-intaked review journeys remain to be verified. Reviewer understanding and creative acceptance remain pending.
+
 Record meaningful discoveries, decisions and surprises as the product is built. Separate observations from hypotheses; do not fabricate user research, performance or results.
 
 ## Entry 001 — Starting design conviction
@@ -212,3 +220,7 @@ Record meaningful discoveries, decisions and surprises as the product is built. 
 **Decision:** Carry the selected finding index in the comparison route, open that finding directly, and give every finding associated with a passage its own comparison link. Describe XML anchors as source passages; show the schedule heading with a short wording excerpt in the overview.
 
 **Evidence and uncertainty:** The UI regression suite checks the T05 second and fourth findings through the comparison round trip, verifies all findings attached to shared passages are exposed, and confirms the overview no longer calls XML positions contractual paragraphs. Browser screenshots and mobile rendering still need review; human creative acceptance remains pending.
+
+## 19 October 2026 — automatic comparison / human review integration
+
+Integrated #33 and #25 on a separate branch. Real browser testing exposed and corrected uploaded-review submit handling, precise finding navigation and narrow-screen overflow. Assessments preserve customer-order reference evidence and saved revisions/history. The separate HTTP pilot, blinded fixture results and private/public rendered checks are recorded in [INTEGRATED_REVIEW_ACCEPTANCE.md](INTEGRATED_REVIEW_ACCEPTANCE.md). Five blinded cases match, two correctly abstain and three unnecessarily abstain; this does not justify claiming broad matching accuracy. PDF, feed hosting and bulk corpus growth remain outside this integration.

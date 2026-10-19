@@ -180,6 +180,138 @@ class AITests(unittest.TestCase):
 
 
 class JourneyTests(unittest.TestCase):
+    def test_finding_assessments_are_distinct_append_only_and_source_bound(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            detail=app.detail('T05')
+            findings=detail['analysis']['findings']
+            self.assertEqual(len(findings),4)
+            one=findings[1]
+            first=app.assess_finding('T05',one['id'],'problem','Reviewer','Resolve the precedence issue.')
+            self.assertEqual(first['revision'],1)
+            self.assertEqual(first['source_sha256'],detail['document']['sha256'])
+            self.assertEqual(first['reference_sha256'],detail['reference']['sha256'])
+            duplicate=app.assess_finding('T05',one['id'],'problem','Reviewer','Resolve the precedence issue.')
+            self.assertEqual(duplicate['id'],first['id'])
+            revised=app.assess_finding('T05',one['id'],'acceptable','Reviewer','Accepted with the stated scope.')
+            self.assertEqual(revised['revision'],2)
+            self.assertEqual(revised['supersedes'],first['id'])
+            with self.assertRaises(ValueError):
+                app.assess_finding('T05',one['id'],'deal_breaker','Reviewer','')
+            with self.assertRaises(ValueError):
+                app.assess_finding('T05','invented','acceptable','Reviewer','')
+            reloaded=App(ROOT,Path(temp)).detail('T05')
+            self.assertEqual(len(reloaded['finding_assessments']),2)
+            self.assertEqual(reloaded['latest_finding_assessments'][one['id']]['assessment'],'acceptable')
+
+    def test_contract_actions_are_separate_and_accept_requires_original_review(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            finding=app.detail('T03')['analysis']['findings'][0]
+            app.assess_finding('T03',finding['id'],'deal_breaker','Reviewer','Unacceptable as drafted.')
+            with self.assertRaises(ValueError):
+                app.record_contract_action('T03','accept_contract','Reviewer','Override.',True)
+            with self.assertRaises(ValueError):
+                app.record_contract_action('T01','accept_contract','Reviewer','Reviewed.',False)
+            accepted=app.record_contract_action('T01','accept_contract','Reviewer','Independently reviewed original.',True)
+            flagged=app.record_contract_action('T01','flag_for_review','Reviewer','Need a second reviewer.',False)
+            self.assertEqual(accepted['decision'],'approve')
+            self.assertEqual(accepted['contract_action'],'accept_contract')
+            self.assertNotIn('decision', flagged)
+            self.assertEqual(flagged['status'], 'pending')
+            self.assertIsNone(app.queue()[next(i for i,row in enumerate(app.queue()) if row['id']=='T01')]['latest_decision'])
+            self.assertEqual(flagged['contract_action'],'flag_for_review')
+            self.assertEqual(len(App(ROOT,Path(temp)).detail('T01')['contract_actions']),2)
+
+    def test_new_intake_can_be_flagged_without_misusing_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app=App(ROOT,Path(temp))
+            data=(ROOT/'dataset/incoming/T01-template-match.docx').read_bytes()
+            intake=app.intake(data,'incoming.docx')
+            event=app.record_contract_action(intake['id'],'flag_for_review','Reviewer','Confirm which reference applies.')
+            self.assertNotIn('decision', event)
+            self.assertEqual(event['status'], 'pending')
+            self.assertEqual(event['contract_action'],'flag_for_review')
+            refreshed=App(ROOT,Path(temp)).intake_detail(intake['incoming']['sha256'])
+            self.assertIsNone(refreshed['human_decision']['last_decision'])
+            self.assertEqual(refreshed['review_state'], 'flagged')
+            self.assertEqual(refreshed['latest_flag']['contract_action'], 'flag_for_review')
+
+
+    def test_flag_keeps_contract_pending_without_amendment_or_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            flagged = app.record_contract_action('T05', 'flag_for_review', 'Reviewer', 'Ask a second reviewer.')
+            self.assertEqual(flagged['status'], 'pending')
+            self.assertEqual(flagged['contract_action'], 'flag_for_review')
+            self.assertNotIn('decision', flagged)
+            self.assertEqual(app.detail('T05')['review_state'], 'flagged')
+            self.assertIsNone(next(x for x in app.queue() if x['id'] == 'T05')['latest_decision'])
+            self.assertEqual(app.record_contract_action('T05', 'flag_for_review', 'Reviewer',
+                                                        'Ask a second reviewer.')['id'], flagged['id'])
+            persisted = App(ROOT, Path(temp))
+            self.assertEqual(len(persisted.detail('T05')['contract_actions']), 1)
+            self.assertEqual(persisted.queue()[next(i for i,x in enumerate(persisted.queue()) if x['id']=='T05')]['review_state'], 'flagged')
+
+    def test_reflag_after_human_acceptance_returns_contract_to_pending_queue(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            first = app.record_contract_action('T01', 'flag_for_review', 'Reviewer', 'Ask legal to look again.')
+            app.record_contract_action('T01', 'accept_contract', 'Reviewer',
+                                       'I independently inspected the original agreement.', True)
+            self.assertEqual(app.detail('T01')['review_state'], 'decided')
+            second = app.record_contract_action('T01', 'flag_for_review', 'Reviewer', 'Ask legal to look again.')
+            self.assertNotEqual(first['id'], second['id'])
+            reloaded = App(ROOT, Path(temp))
+            self.assertEqual(reloaded.detail('T01')['review_state'], 'flagged')
+            self.assertIsNone(next(row for row in reloaded.queue() if row['id'] == 'T01')['latest_decision'])
+
+    def test_unassessed_and_needs_further_review_require_explanation_and_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I independently checked the entire original and resolved each question.', True)
+            with self.assertRaisesRegex(ValueError, 'Explain'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer', 'Too short', True, True)
+            first = app.detail('T05')['analysis']['findings'][0]['id']
+            app.assess_finding('T05', first, 'needs_further_review', 'Reviewer', 'Specialist input needed.')
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I reviewed the outstanding specialist question and assume the risk.', True)
+            accepted = app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                'I independently checked the exact original, considered each open finding, and accept the remaining risk.',
+                True, True)
+            self.assertTrue(accepted['independent_original_reviewed'])
+            self.assertTrue(accepted['unresolved_findings_acknowledged'])
+            self.assertEqual(accepted['decision'], 'approve')
+            self.assertTrue(App(ROOT, Path(temp)).detail('T05')['history'][-1]['unresolved_findings_acknowledged'])
+
+    def test_direct_legacy_approval_endpoint_requires_review_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            detail = app.detail('T05')
+            original = detail['document']
+            with self.assertRaisesRegex(ValueError, 'Acknowledge'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I checked the original and every remaining issue.', True)
+            with self.assertRaisesRegex(ValueError, 'original'):
+                app.record_contract_action('T05', 'accept_contract', 'Reviewer',
+                                           'I checked the original and every remaining issue.', False, True)
+
+    def test_earlier_flag_records_remain_visible_but_are_not_final_decisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = App(ROOT, Path(temp))
+            detail = app.detail('T01')
+            app.ledger.append(detail['document']['sha256'], detail['document']['filename'], 'Old reviewer',
+                'request_amendment', 'Review needed, not an actual amendment request.', [],
+                reference_sha256=detail['reference']['sha256'], contract_action='flag_for_review')
+            after = App(ROOT, Path(temp)).detail('T01')
+            self.assertEqual(after['review_state'], 'flagged')
+            self.assertEqual(len(after['contract_actions']), 1)
+            self.assertEqual(after['history'], [])
+            self.assertIsNone(next(row for row in app.queue() if row['id'] == 'T01')['latest_decision'])
+
     def test_http_queue_original_decision_refresh_and_upload(self):
         with tempfile.TemporaryDirectory() as temp:
             Handler.app=App(ROOT,Path(temp))
