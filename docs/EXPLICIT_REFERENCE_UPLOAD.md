@@ -10,7 +10,7 @@ For a supported NDA or customer order with a suitable Active reference, the serv
 
 The fictional research catalogue remains marked `research_candidate`. Registering a chosen specimen as an Active fictional standard is a one-time controlled library setup; it does not elevate the research record or require a user to classify each subsequent incoming contract. The public static site remains read-only and cannot accept uploads. No private hosting or bulk import is included here.
 
-For a repeatable local starter workspace, run `python3 scripts/seed_synthetic_starter.py --state-dir /tmp/chug-starter` from the repository root, then start the local server against that state directory. The script registers two fictional standards and creates four real queue intakes (an exact copy and a changed example for each family). It passes no reference ID to intake, so it exercises automatic selection. Re-running it keeps the same source-bound queue records.
+For a repeatable local starter workspace, run `python3 scripts/seed_synthetic_starter.py --state-dir /tmp/chug-starter` from the repository root, then start the local server against that state directory. The script registers two fictional standards and creates five real queue intakes (an exact copy and a changed example for each family, plus an ambiguous purchase that should abstain with comparison not run). It passes no reference ID to intake, so it exercises automatic selection. Re-running it keeps the same source-bound queue records.
 
 ## Demonstrated paths
 
