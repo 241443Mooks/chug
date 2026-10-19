@@ -66,6 +66,32 @@ class IncomingIntakeTests(unittest.TestCase):
             self.assertEqual(duplicate["id"], detail["id"])
         self.assertEqual(len(self.app.intakes), 2)
 
+
+    def test_starter_reproduces_all_five_submission_scenarios(self):
+        from scripts.seed_synthetic_starter import seed
+
+        first = seed(self.state)
+        self.assertEqual(len(first), 5)
+        self.assertEqual([row["example"] for row in first], [
+            "exact copy", "changed wording", "exact copy", "changed wording", "ambiguous purchase",
+        ])
+        for row in first[:4]:
+            self.assertEqual(row["selected_reference_id"], row["expected_reference_id"])
+            self.assertIn(row["comparison_status"], {"analysed", "complete"})
+            self.assertEqual(row["human_decision"], "pending")
+        abstained = first[-1]
+        self.assertIsNone(abstained["selected_reference_id"])
+        self.assertEqual(abstained["comparison_status"], "not_run")
+        self.assertEqual(abstained["human_decision"], "pending")
+        self.assertTrue(abstained["reason"])
+        repeated = seed(self.state)
+        self.assertEqual(
+            [(row["incoming_sha256"], row["selected_reference_id"], row["comparison_status"]) for row in repeated],
+            [(row["incoming_sha256"], row["selected_reference_id"], row["comparison_status"]) for row in first],
+        )
+        self.assertEqual(len(App(ROOT, self.state).intakes), 5)
+
+
     def test_explicit_wrong_family_and_unverified_reference_are_blocked(self):
         standard = (ROOT / "research/reference-library-v0.1/references/sales-orders/Customer Order - Reseller Desktop Licences - v0.1.docx")
         incoming = (ROOT / "research/reference-library-v0.1/incoming-tests/Incoming - Evaluation NDA with Longer Retention.docx")
