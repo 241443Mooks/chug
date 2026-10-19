@@ -6,7 +6,7 @@ Chug compares fictional contracts with reference documents. Start with the [READ
 
 Open [chug.smooks.co.uk](https://chug.smooks.co.uk), then the review queue. Try Falcon Data for a flagged clause, Brookside AI for a past decision, and Birchbridge for a routine candidate. Inspect the findings, comparison and original documents.
 
-The public demo is read-only. The review choices are examples; they do not save anything. It may differ from the latest local version.
+The public demo is read-only. The review choices are examples; they do not save anything. The live site and repository may differ; either may contain newer changes. Check each version directly when confirming what it can do.
 
 ## Run locally
 
