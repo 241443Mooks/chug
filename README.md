@@ -1,6 +1,6 @@
 # Chug
 
-A contract comparison prototype built for the PortSwagger project. It uses fictional documents.
+A contract comparison prototype built for the PortSwigger application exercise. It uses fictional documents.
 
 The immediate job is “spot the difference”: find a suitable reference, compare the incoming contract with it, and show the wording that needs a person's attention.
 
