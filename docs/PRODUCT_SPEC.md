@@ -1,6 +1,6 @@
 # Product scope
 
-This describes the local synthetic prototype on main. The deployed public demo may be older. Implementation and test records take precedence over design intentions.
+This describes the local synthetic prototype on main. The live site and repository may differ; either may contain newer changes. Check each version directly when confirming what it can do. Implementation and test records take precedence over design intentions.
 
 ## Current workflow
 
