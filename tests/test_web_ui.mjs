@@ -467,3 +467,14 @@ test('public pages use clear tasks and keep human decision limits visible',()=>{
   assert.match(history,/These decisions are made up/);
   assert.match(history,/Do not use these examples as approval/);
 });
+
+test('public home does not advertise a reference choice for uploads',()=>{
+  const publicApp=harness(items,'chug.smooks.co.uk');
+  const home=publicApp.run('homeView()');
+  assert.match(home,/This public demo does not accept uploads/);
+  assert.doesNotMatch(home,/Reference for new uploads|loading reference|data-page="reference"/);
+  const localApp=harness(items,'localhost');
+  const localHome=localApp.run('homeView()');
+  assert.match(localHome,/Chug searches the Active reference library/);
+  assert.doesNotMatch(localHome,/Reference for new uploads|loading reference/);
+});
