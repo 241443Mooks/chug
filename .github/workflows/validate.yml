@@ -32,3 +32,7 @@ jobs:
           node --check web/app.js
           node --check web/decision-log.js
           node --test tests/test_web_ui.mjs
+      - name: Verify actual submission archive
+        run: |
+          python3 scripts/package_submission.py --output /tmp/chug-submission-check.zip
+          python3 -m zipfile -t /tmp/chug-submission-check.zip

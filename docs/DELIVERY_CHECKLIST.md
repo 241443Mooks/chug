@@ -57,6 +57,24 @@ PortSwigger's application task requests **a single zipped file** showing how AI 
 - [ ] No keys, tokens, local `.env`, private records, sensitive logs, caches, virtual environments, build clutter or unnecessary generated artifacts.
 - [ ] Include exact commands, supported Python version, known limitations and dependency constraints.
 
+## Build and verify the requested single ZIP
+
+After the final integrated branch has been accepted, use a clean checkout at the exact chosen commit:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_*.py'
+node --test tests/test_web_ui.mjs
+python3 -m tests.evaluate
+python3 -m tests.adversarial_audit
+python3 scripts/package_submission.py --output dist/chug-submission.zip
+python3 -m zipfile -t dist/chug-submission.zip
+python3 -m zipfile -e dist/chug-submission.zip /tmp/chug-submission-check
+```
+
+The packaging script archives only **committed files at HEAD**, validates required source/documentation, rejects dangerous filenames and symbolic links, checks ZIP integrity and records SHA-256 in a `.zip.sha256` sidecar. Untracked files (such as a local `.env` or private incoming files) are never included.
+
+**This is not a substitute for manual inspection.** Before sending, inspect the extracted content for privacy, licence/suitability, current instructions, synthetic-only datasets and any tracked secrets. From the extracted folder, start the documented local app and repeat the acceptance walkthrough. Only the ZIP itself is the requested application deliverable; the checksum is an audit record. Do not claim the archive has passed these steps until they are actually run.
+
 ## Git workflow
 - [ ] Work on a feature branch; keep commits coherent and reviewable.
 - [ ] Draft PR includes milestone evidence and outstanding issues.

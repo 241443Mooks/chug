@@ -339,7 +339,7 @@ test('local reference library groups fictional standards, the legacy NDA baselin
   assert.match(page,/will not suggest it for new contracts/);
   assert.match(page,/Examples for testing — not reference documents/);
   assert.doesNotMatch(page,/Research library · not active review standards|not been approved as organisational guidance/);
-  assert.match(h.run('helpView()'),/What is a reference/);
+  assert.match(h.run('helpView()'),/How references work/);
   assert.match(h.run('helpView()'),/public References page also contains fictional testing examples/);
 });
 
